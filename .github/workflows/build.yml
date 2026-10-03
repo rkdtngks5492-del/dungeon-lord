@@ -3,64 +3,28 @@ name: APK 빌드
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:      # 깃허브 화면에서 버튼으로 직접 실행
+  workflow_dispatch:
 
 jobs:
   debug:
-    name: 디버그 APK (폰에 바로 설치용)
+    name: 디버그 APK
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
-      - uses: android-actions/setup-android@v3
-
+      - name: SDK 확인
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" "platform-tools" > /dev/null || true
       - name: 빌드
         working-directory: android-app
         run: gradle assembleDebug --no-daemon --stacktrace
-
       - uses: actions/upload-artifact@v4
         with:
           name: dungeon-lord-debug
           path: android-app/app/build/outputs/apk/debug/*.apk
-          retention-days: 30
-
-  release:
-    name: 출시용 AAB (구글 플레이 업로드용)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - uses: android-actions/setup-android@v3
-
-      # 서명 키가 저장소 시크릿에 등록돼 있을 때만 서명된 파일이 나옵니다.
-      # 없으면 서명 안 된 AAB가 나오고, 그건 플레이에 올릴 수 없습니다.
-      - name: 서명 키 복원
-        env:
-          KS: ${{ secrets.KEYSTORE_BASE64 }}
-        if: env.KS != ''
-        run: echo "$KS" | base64 -d > android-app/app/keystore.jks
-
-      - name: 빌드
-        working-directory: android-app
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: gradle bundleRelease --no-daemon --stacktrace
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: dungeon-lord-release-aab
-          path: android-app/app/build/outputs/bundle/release/*.aab
           retention-days: 30
