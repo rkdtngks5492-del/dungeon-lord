@@ -404,6 +404,17 @@ const TRAPM = {
     for (let i = 0; i < 8; i++) { const a = i / 8 * 6.283 + T * 1.8, r = 0.2 + (i % 3) * 0.12;
       P.push([Math.cos(a) * r, 0.14 + (i % 3) * 0.1, Math.sin(a) * r, 0.2, 0.06, 0.08, i % 2 ? '#c77dff' : '#8be9ff', a]); }
     P.push([0, 0.2, 0, 0.22, 0.3, 0.22, '#1a0a28']); return P; },
+  snare() { const P = [[0, 0.03, 0, 0.98, 0.06, 0.98, '#2a2434']];
+    for (let i = 0; i < 8; i++) { const a = i / 8 * 6.283; P.push([Math.cos(a) * 0.3, 0.1, Math.sin(a) * 0.3, 0.22, 0.07, 0.07, '#c8a878', a + 1.57]); }
+    P.push([0, 0.13, 0, 0.16, 0.12, 0.16, '#8a6a3a']); return P; },
+  gas() { const f = Math.sin(T * 3) * 0.05;
+    return [[0, 0.04, 0, 1.0, 0.08, 1.0, '#24301e'], [0, 0.12, 0, 0.3, 0.14, 0.3, '#4a5a3a'],
+      [-0.18, 0.28 + f, 0.1, 0.34, 0.2, 0.3, '#b8e0a0', 0.5], [0.18, 0.34 - f, -0.1, 0.3, 0.22, 0.3, '#d4f0b8', -0.4], [0, 0.46 + f, 0, 0.26, 0.16, 0.26, '#e8f8d0', 0.2]]; },
+  blade() { const a = T * 6, P = [[0, 0.04, 0, 1.0, 0.08, 1.0, '#26222e'], [0, 0.12, 0, 0.14, 0.14, 0.14, '#6a6a7a']];
+    P.push([0, 0.2, 0, 0.9, 0.05, 0.12, '#d8dce8', a]); P.push([0, 0.2, 0, 0.9, 0.05, 0.12, '#d8dce8', a + 1.57]); return P; },
+  curse() { const g = 0.5 + Math.sin(T * 3) * 0.3, P = [[0, 0.04, 0, 1.0, 0.08, 1.0, '#1c1028'], [0, 0.11, 0, 0.9, 0.04, 0.9, dk('#b06aff', 0.6 + g * 0.4)]];
+    P.push([0, 0.14, 0, 0.84, 0.03, 0.12, '#e0c0ff', 0]); P.push([0, 0.14, 0, 0.84, 0.03, 0.12, '#e0c0ff', 1.05]); P.push([0, 0.14, 0, 0.84, 0.03, 0.12, '#e0c0ff', -1.05]);
+    P.push([0, 0.24 + g * 0.1, 0, 0.18, 0.2, 0.18, '#d8a8ff']); return P; },
 };
 const CRYSTAL = () => { const g = 0.5 + Math.sin(T * 2) * 0.3;
   return [[0, 0.06, 0, 1.1, 0.12, 1.1, '#2a1f42'], [0, 0.1, 0, 0.78, 0.08, 0.78, dk('#8b5cf6', 0.7), 0.78],
@@ -506,6 +517,21 @@ const DEF = {
   dragon: { ico:'🐉', side:'D', kind:'minion', rar:'SSR', name:'흑룡', hp:540, dmg:48, rng:148, cd:1.2, aoe:true, shot:true, sc:46,
             note:'긴 사거리 광역 브레스', art:{ shape:'dragon', body:'#c74a3a', accent:'#7a2020' } },
 
+  wolf:   { ico:'🐺', side:'D', kind:'minion', rar:'N', name:'지옥견', hp:125, spd:74, leash:140, dmg:14, rng:34, cd:0.6, sc:34,
+            note:'빠르게 달려가 물어뜯는 사냥개', art:{ shape:'burly', body:'#4a3a3a', skin:'#6a5048', accent:'#ff5a3a', weapon:'dagger', eyes:'#ff5a3a', horns:true, horn:'#2a1a1a' } },
+  zombie: { ico:'🧟', side:'D', kind:'minion', rar:'N', name:'좀비', hp:430, spd:22, leash:84, dmg:13, rng:34, cd:1.1, sc:37,
+            note:'느리지만 쓰러지지 않는 두툼한 방패', art:{ shape:'burly', body:'#6a7a58', skin:'#8aa070', accent:'#4a3a2a', weapon:'club', eyes:'#e8e8a0' } },
+  spider: { ico:'🕷️', side:'D', kind:'minion', rar:'N', name:'독거미', hp:105, spd:60, leash:130, dmg:12, rng:60, cd:0.8, slow:0.4, shot:true, sc:32,
+            note:'독침으로 침입자 발을 늦춤', art:{ shape:'burly', body:'#3a2a4a', skin:'#5a3a6a', accent:'#9aff5a', weapon:'dagger', eyes:'#9aff5a', horns:true, horn:'#9aff5a' } },
+  darkkn: { ico:'🏴', side:'D', kind:'minion', rar:'R', name:'타락기사', hp:420, spd:34, leash:110, dmg:23, rng:38, cd:1.0, sc:40,
+            note:'어둠에 물든 전열. 단단하고 묵직함', art:{ shape:'burly', body:'#2a2a3a', accent:'#7a2a4a', helm:true, weapon:'sword', cape:'#4a1a2a', eyes:'#ff4a6a' } },
+  succub: { ico:'💋', side:'D', kind:'minion', rar:'R', name:'서큐버스', hp:150, spd:56, leash:124, dmg:22, rng:112, cd:1.0, shot:true, slow:0.3, sc:36,
+            note:'매혹의 마법탄으로 먼 거리에서 공격', art:{ shape:'burly', body:'#8a2a5a', skin:'#f0c0c8', accent:'#3a1020', horns:true, horn:'#2a1020', weapon:'staff', glow:'#ff7ac8' } },
+  lich:   { ico:'☠️', side:'D', kind:'minion', rar:'SR', name:'리치', hp:230, spd:30, leash:100, dmg:36, rng:140, cd:1.4, aoe:true, shot:true, sc:42,
+            note:'죽음의 마법을 넓게 퍼뜨리는 군주', art:{ shape:'wraith', body:'#6a8a9a', eyes:'#7aff9a' } },
+  demon:  { ico:'👹', side:'D', kind:'minion', rar:'SSR', name:'대악마', hp:1050, spd:34, leash:130, dmg:62, rng:46, cd:1.3, sc:50,
+            note:'전장을 찢는 마계의 거인', art:{ shape:'golem', body:'#8a2a2a', accent:'#ffb35a', eyes:'#ffd35a' } },
+
   /* 함정은 '밟는 순간 한 번 크게 터지는' 일회성이다. 웨이브가 끝나면 다시 장전된다.
      rng = 폭발 반경, dmg = 한 방 피해, trig = 밟았다고 보는 거리 */
   spikes: { ico:'🔺', side:'D', kind:'trap', rar:'N', name:'가시밭', dmg:78, rng:46, trig:30, col:'#cfd8e4', sc:54,
@@ -526,6 +552,15 @@ const DEF = {
             note:'좁지만 한 방에 가장 큰 피해 (1회)' },
   rift:   { ico:'🌀', side:'D', kind:'trap', rar:'SSR', name:'차원 균열', dmg:55, rng:66, trig:32, col:'#c77dff', push:110, stun:1.2, sc:54,
             note:'무리를 입구 쪽으로 통째로 밀어냄 (1회)' },
+
+  snare:  { ico:'🪢', side:'D', kind:'trap', rar:'N', name:'올가미', dmg:36, rng:40, trig:30, col:'#c8a878', stun:1.8, sc:54,
+            note:'다리를 조여 잠시 붙잡음 (1회)' },
+  gas:    { ico:'💨', side:'D', kind:'trap', rar:'R', name:'수면 가스', dmg:0, rng:82, trig:32, col:'#b8e0a0', stun:3.6, slow:0.5, slowT:3, sc:54,
+            note:'넓게 퍼져 모두를 잠재움 (1회)' },
+  blade:  { ico:'🌀', side:'D', kind:'trap', rar:'R', name:'회전 칼날', dmg:115, rng:42, trig:30, col:'#d8dce8', dot:14, dotT:4, sc:54,
+            note:'지나가는 자를 베고 피를 흘리게 함 (1회)' },
+  curse:  { ico:'🔯', side:'D', kind:'trap', rar:'SR', name:'저주 인장', dmg:70, rng:92, trig:32, col:'#b06aff', dot:22, dotT:5, slow:0.5, slowT:5, sc:54,
+            note:'넓은 저주로 약화시키고 갉아먹음 (1회)' },
 
   vagrant:{ ico:'🚶', side:'H', tier:'mob', name:'떠돌이', hp:55, dmg:4, rng:26, cd:1.0, spd:30, rew:2, sc:34,
             art:{ shape:'burly', body:'#b09878', accent:'#6a4a2a', weapon:'dagger', skin:'#f2cba3' } },
@@ -556,7 +591,7 @@ const DEF = {
 /* 보스 그림 별칭: 새 그림이 오기 전까지 기존 용사 그림을 쓴다 */
 /* 역할: 전열(tank)은 '도발' — 근접 공격은 전열부터 때려야 한다. 암살(assassin)·비행은 도발을 무시하고,
    원거리(ranged)는 지원 > 원거리 > 근접 > 전열 순으로 약한 쪽부터 노린다. */
-const ROLE = { slime:'tank', golem:'tank', goblin:'melee', imp:'melee', bat:'assassin', skel:'ranged', ghost:'ranged', witch:'ranged', dragon:'ranged',
+const ROLE = { wolf:'assassin', zombie:'tank', spider:'ranged', darkkn:'tank', succub:'ranged', lich:'ranged', demon:'tank', slime:'tank', golem:'tank', goblin:'melee', imp:'melee', bat:'assassin', skel:'ranged', ghost:'ranged', witch:'ranged', dragon:'ranged',
                vagrant:'melee', trainee:'tank', looter:'assassin', lancer:'tank', ranger:'ranged', cleric:'support', warlock:'ranged', champion:'tank', paladin:'tank',
                boss1:'tank', boss2:'tank', boss3:'ranged' };
 for (const k in ROLE) DEF[k].role = ROLE[k];
@@ -1628,35 +1663,35 @@ function drawLobby() {
   btn(184, 56, 164, 28, '함정  ' + SAVE.tteam.length + '/' + tSlots(), () => { L.tab = 'trap'; L.info = null; }, { on:!isM, bg:!isM ? '#4a3a63' : '#1e1829', fs:12 });
 
   const pool = isM ? MINIONS : TRAPSL, team = isM ? SAVE.mteam : SAVE.tteam;
-  const cw = 110, chh = 112, cg = 6, cx0 = (W - (cw * 3 + cg * 2)) / 2, cy0 = 96;
+  const cw = 84, chh = 86, cg = 5, cx0 = (W - (cw * 4 + cg * 3)) / 2, cy0 = 90;
   pool.forEach((k, i) => {
-    const d = DEF[k], x = cx0 + (i % 3) * (cw + cg), y = cy0 + Math.floor(i / 3) * (chh + cg);
+    const d = DEF[k], x = cx0 + (i % 4) * (cw + cg), y = cy0 + Math.floor(i / 4) * (chh + cg);
     const lv = SAVE.own[k], inT = team.indexOf(k) >= 0, col = RAR_COL[d.rar];
     BTN.push({ x, y, w:cw, h:chh, act:() => { L.info = k; toggleTeam(k); }, label:'카드:' + k });
     ctx.fillStyle = lv ? '#271f38' : '#1a1524'; rbox(x, y, cw, chh, 8); ctx.fill();
     ctx.strokeStyle = inT ? '#ffd35a' : col; ctx.lineWidth = inT ? 3 : 1.5; rbox(x, y, cw, chh, 8); ctx.stroke();
-    ctx.fillStyle = col; rbox(x + 6, y + 6, 46, 15, 7); ctx.fill();
-    txt(RAR_NAME[d.rar], x + 29, y + 14, 9, '#141018', 'center');
-    if (inT) txt('편성', x - 9 + cw, y + 14, 10, '#ffd35a', 'right');
+    ctx.fillStyle = col; rbox(x + 4, y + 4, 34, 13, 6); ctx.fill();
+    txt(RAR_NAME[d.rar], x + 21, y + 11, 8, '#141018', 'center');
+    if (inT) txt('편성', x - 5 + cw, y + 11, 9, '#ffd35a', 'right');
     ctx.globalAlpha = lv ? 1 : 0.15;
     const ci = unitImg(k);
-    if (ci) fitImg(ctx, ci, x + cw / 2, y + 82, cw - 20, 68);
-    else ctx.drawImage(thumb(k), x + cw / 2 - 40, y + 12, 80, 80);
+    if (ci) fitImg(ctx, ci, x + cw / 2, y + 60, cw - 14, 46);
+    else ctx.drawImage(thumb(k), x + cw / 2 - 28, y + 10, 56, 56);
     ctx.globalAlpha = 1;
     if (lv) {
-      txt(d.name, x + cw / 2, y + 88, 12, '#fff', 'center');
-      txt('Lv.' + lv + (lv >= MAX_LV ? ' MAX' : ''), x + cw / 2, y + 102, 10, '#c9b8ff', 'center');
-    } else txt('미보유', x + cw / 2, y + 94, 11, '#6b5a85', 'center');
+      txt(d.name, x + cw / 2, y + 68, 10, '#fff', 'center');
+      txt('Lv.' + lv + (lv >= MAX_LV ? ' MAX' : ''), x + cw / 2, y + 79, 9, '#c9b8ff', 'center');
+    } else txt('미보유', x + cw / 2, y + 70, 10, '#6b5a85', 'center');
   });
 
-  const iy = cy0 + 3 * (chh + cg) + 6;
+  const iy = cy0 + 4 * (chh + cg) + 2;
   ctx.fillStyle = '#1a1524'; rbox(12, iy, W - 24, 38, 6); ctx.fill();
   if (L.info && SAVE.own[L.info]) {
     const d = DEF[L.info], m = lvMult(SAVE.own[L.info]);
     txt(d.name + ' — ' + d.note, 20, iy + 13, 10, '#ffe9a8');
     txt(d.kind === 'minion'
       ? '체력 ' + Math.round(d.hp * m) + ' · 공격 ' + Math.round(d.dmg * m) + ' · 사거리 ' + d.rng + ' · ' + d.cd + '초'
-      : '피해 ' + Math.round(d.dmg * m) + ' · 범위 ' + d.rng + ' · ' + d.cd + '초' + (d.slow ? ' · 둔화' : '') + (d.push ? ' · 밀어내기' : ''),
+      : '피해 ' + Math.round(d.dmg * m) + ' · 범위 ' + d.rng + (d.stun ? ' · 기절 ' + d.stun + '초' : '') + (d.slow ? ' · 둔화' : '') + (d.push ? ' · 밀어내기' : ''),
       20, iy + 27, 10, '#9aa0a6');
   } else txt(L.msg, W / 2, iy + 19, 11, '#ffe9a8', 'center');
 
@@ -2105,7 +2140,7 @@ function drawGame() {
     if (hi) fitImg(ctx, hi, x + bw / 2, y + 44, bw - 6, 40);
     else ctx.drawImage(thumb(k), x + bw / 2 - 21, y + 3, 42, 42);
     ctx.globalAlpha = 1;
-    txt(left > 0 ? 'Lv' + (SAVE.own[k] || 1) : '배치됨', x + bw / 2, y + 49, 9, left > 0 ? '#c9b8ff' : '#6b5a85', 'center');
+    txt(left > 0 ? 'Lv' + (SAVE.own[k] || 1) : (bw < 34 ? '✓' : '배치됨'), x + bw / 2, y + 49, 9, left > 0 ? '#c9b8ff' : '#6b5a85', 'center');
   });
   const sy = PANEL_Y + 70, sw = 82, sg = 6, sx = (W - (sw * 4 + sg * 3)) / 2;
   SKILLS.forEach((s, i) => {
