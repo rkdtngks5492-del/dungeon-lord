@@ -581,10 +581,10 @@ const AFFIX = {
 const STAGES = [
   { no:1, name:'바깥 통로',   from:0,  to:2,  mul:1.30, gems:140,  stone:190 },
   { no:2, name:'지하 묘지',   from:3,  to:5,  mul:1.60, gems:320,  stone:220 },
-  { no:3, name:'옥좌의 길',   from:6,  to:8,  mul:1.15, gems:700,  stone:270 },
+  { no:3, name:'옥좌의 길',   from:6,  to:8,  mul:0.80, gems:700,  stone:270 },
   { no:4, name:'피의 회랑',   from:9,  to:11, mul:2.40, gems:1200, stone:320 },
-  { no:5, name:'봉인된 성소', from:12, to:14, mul:1.45, gems:2000, stone:370 },
-  { no:6, name:'심연의 왕좌', from:15, to:17, mul:1.45, gems:3500, stone:430 },
+  { no:5, name:'봉인된 성소', from:12, to:14, mul:1.35, gems:2000, stone:370 },
+  { no:6, name:'심연의 왕좌', from:15, to:17, mul:1.30, gems:3500, stone:430 },
 ];
 /* 무한 모드: 끝없이 이어지는 웨이브를 그때그때 만들어 낸다 */
 const ENDLESS = -1;
@@ -1293,7 +1293,7 @@ function update(dt) {
     G.corpses.push({ key:b.key, def:b.def, x:b.x, z:b.z, yaw:b.yaw, t:1, dir:Math.random() < 0.5 ? -1 : 1 });
     /* 부하는 사라지지 않고 제 방에서 다시 일어선다. 긴 웨이브에서 전멸하지 않게 하는 핵심 장치 */
     const full = REVIVE[b.def.rar] || 12;
-    G.revive.push({ i, key:b.key, def:b.def, maxHp:b.maxHp, dmg:b.dmg, hx:b.hx, hz:b.hz, d:b.homeD, t:full, full });
+    G.revive.push({ i, key:b.key, def:b.def, maxHp:b.maxHp, dmg:b.dmg, hx:b.hx, hz:b.hz, d:b.homeD, t:1e9, full });
     G.rooms[i] = null; SFX.die(); hitstop(0.05);
   }
   for (const h of G.heroes) if (h.hp <= 0) {
@@ -1858,12 +1858,9 @@ function drawScene() {
       const s = proj(ROOMS[i].x, 10, ROOMS[i].z); if (!s) continue;
       const rv = G.revive.find(v => v.i === i);
       if (rv) {
-        const k = 1 - rv.t / rv.full;
-        ctx.globalAlpha = 0.35 + Math.sin(T * 6) * 0.15;
-        txt(Math.ceil(rv.t) + '초', s[0], s[1] - 8, 11, '#c77dff', 'center');
+        ctx.globalAlpha = 0.55;
+        txt('쓰러짐', s[0], s[1] - 4, 10, '#8a7aa5', 'center');
         ctx.globalAlpha = 1;
-        const w = 26 * (540 / s[2]) * 1.2;
-        bar2(s[0] - w / 2, s[1] + 4, w, 3.5, k, '#c77dff');
       } else if (G.phase === 'prep') txt('+', s[0], s[1], 15, '#7b6a95', 'center');
     }
     else if (b.def.kind === 'minion') {
@@ -1942,16 +1939,19 @@ function drawGame() {
   if (G.aim) { ctx.globalAlpha = 0.6 + Math.sin(T * 8) * 0.3; txt('운석을 떨어뜨릴 곳을 누르세요', 12, 76, 13, '#ffa94d'); ctx.globalAlpha = 1; }
 
   /* 시점 버튼 */
-  btn(W - 74, 68, 62, 22, SAVE.mute ? '소리 꺼짐' : '소리 켜짐',
+  btn(284, 68, 70, 22, SAVE.mute ? '소리 꺼짐' : '소리 켜짐',
       () => { SAVE.mute = !SAVE.mute; persist(); }, { bg:'rgba(40,32,60,.85)', fs:10, fc:SAVE.mute ? '#8a7aa5' : '#8be9ff' });
   /* 길 바로가기 */
   ['A길', 'B길', 'C길', '교차로'].forEach((nm, i) => {
-    btn(8 + i * 41, 68, i === 3 ? 46 : 38, 22, nm, () => { camToView(i); STG.focus = i; },
+    btn(6 + i * 35, 68, i === 3 ? 40 : 32, 22, nm, () => { camToView(i); STG.focus = i; },
         { bg:camMode === 'view' + i ? 'rgba(90,60,40,.9)' : 'rgba(40,32,60,.85)', fs:10, on:camMode === 'view' + i });
   });
-  btn(180, 68, 40, 22, '전체', () => { STG.focus = -1; camTo(G.phase === 'run' ? 'battle' : 'prep', 0.6); },
-      { bg:'rgba(40,32,60,.85)', fs:10 });
-  btn(224, 68, 58, 22, STG.on ? '근접 ON' : '근접 OFF', () => { STG.on = !STG.on; }, { bg:STG.on ? 'rgba(40,70,60,.9)' : 'rgba(40,32,60,.85)', fs:10, fc:STG.on ? '#9ae8b5' : '#8a7aa5' });
+  const manualCam = camManual || STG.focus >= 0;
+  btn(154, 68, 64, 22, manualCam ? '카메라 수동' : '카메라 자동', () => {
+    if (manualCam) { STG.focus = -1; camTo(G.phase === 'run' ? 'battle' : 'prep', 0.6); }
+    else { STG.focus = STG.zone >= 0 ? STG.zone : -1; camManual = true; camFollow = false; }
+  }, { bg:manualCam ? 'rgba(90,60,30,.92)' : 'rgba(30,70,55,.9)', fs:10, fc:manualCam ? '#ffd35a' : '#9ae8b5', on:manualCam });
+  btn(222, 68, 58, 22, STG.on ? '근접 ON' : '근접 OFF', () => { STG.on = !STG.on; }, { bg:STG.on ? 'rgba(40,70,60,.9)' : 'rgba(40,32,60,.85)', fs:10, fc:STG.on ? '#9ae8b5' : '#8a7aa5' });
   drawPreview();
   if (STG.k < 0.05) txt(G.phase === 'run' ? '드래그로 시점 이동' : '배치 시점 (위에서)', W - 12, 98, 9, '#6b5a85', 'right');
 
@@ -2300,7 +2300,7 @@ function stageLayout(dt) {
 
 /* ---------- 매 프레임 ---------- */
 function stageTick(dt) {
-  if (STG.gid !== G) { STG.gid = G; STG.sp.clear(); STG.dying.length = 0; STG.proj.length = 0; STG.nums.length = 0; STG.spk.length = 0; STG.beams.length = 0; STG.rings.length = 0; STG.zone = -1; STG.k = 0; }
+  if (STG.gid !== G) { STG.gid = G; STG.sp.clear(); STG.dying.length = 0; STG.proj.length = 0; STG.nums.length = 0; STG.spk.length = 0; STG.beams.length = 0; STG.rings.length = 0; STG.zone = -1; STG.k = 0; STG.focus = -1; }
   const act = stageActive();
   STG.k += ((act ? 1 : 0) - STG.k) * Math.min(1, dt * 9);
   if (!act && STG.k < 0.01) { STG.k = 0; if (G.sev) G.sev.length = 0; STG.sp.clear(); STG.zone = -1; return; }
@@ -2484,7 +2484,7 @@ function drawStage() {
   ctx.fillStyle = col[1]; ctx.beginPath(); ctx.arc(16, y0 + 14, 3.5, 0, 7); ctx.fill();
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#fff'; ctx.fillText(label, 24, y0 + 14);
   ctx.font = '9px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = STG.focus >= 0 ? '#ffd35a' : '#8a7aa5';
-  ctx.fillText(STG.focus >= 0 ? '고정 · [전체]로 자동' : '자동 추적', W - 8, y0 + 14);
+  ctx.fillText(STG.focus >= 0 ? '고정 · 카메라 버튼으로 자동' : '자동 추적', W - 8, y0 + 14);
   /* 테두리 */
   ctx.fillStyle = col[1]; ctx.fillRect(0, y0 + hh - 2, W, 2);
   ctx.restore();
