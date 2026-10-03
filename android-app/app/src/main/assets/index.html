@@ -412,18 +412,29 @@ const CRYSTAL = () => { const g = 0.5 + Math.sin(T * 2) * 0.3;
 
 /* ================= 던전 구조 ================= */
 /* 입구에서 세 갈래(A·B·C)로 갈라진 길이 교차로에서 하나로 합쳐져 수호석에 닿는다.
-   길마다 거점 3개, 교차로에 거점 1개. 거점은 앞줄·뒷줄 칸으로 이뤄진다.
-   길은 서로 떨어진 평행선이라 옆 길의 적을 벽 너머로 인식하는 문제가 구조적으로 없다. */
-const Z_START = 50, FORK_Z = 112, MERGE_Z = 470, JOIN_Z = 545, Z_END = 700;
+   길마다 거점 3개(칸 3·3·2), 교차로에 거점 1개(칸 6) = 30칸. 앞줄은 막아서고 뒷줄은 쏜다.
+   5관문마다 장(章)이 바뀌고, 장마다 길의 모양·거점 위치·분위기가 조금씩 달라진다. */
+const Z_START = 50, Z_END = 700;
+let FORK_Z = 112, MERGE_Z = 470, JOIN_Z = 545;
 const ROAD_X = [275, 180, 85];           /* 화면이 좌우 반전이라 A길이 화면 왼쪽 */
 const ROAD_NAME = ['A길', 'B길', 'C길'];
 const STONE = { x:180, z:716 };
 const MAPC = { x:180, z:(Z_START + Z_END) / 2 };
-const ROADS = ROAD_X.map(rx => {
-  const pts = [[180, Z_START], [rx, FORK_Z], [rx, MERGE_Z], [180, JOIN_Z], [180, Z_END]], cum = [0];
-  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-  return { rx, pts, cum, len:cum[cum.length - 1] };
-});
+const ROADS = [{}, {}, {}];
+let OP_Z = [185, 300, 415];
+const OUTPOSTS = [], ROOMS = [];
+const MAPCFG = [
+  { name:'던전 외곽',   fork:112, merge:470, join:545, rx:[275, 180, 85], bend:[0, 0, 0],      opz:[185, 300, 415],
+    tile:['#140e1f', '#171024'], road:['#2e2545', '#2a2140'], sky:'#06030b', tint:null },
+  { name:'지하 성채',   fork:128, merge:462, join:548, rx:[284, 180, 76], bend:[22, 0, -22],   opz:[198, 296, 394],
+    tile:['#1c100f', '#211412'], road:['#3a2b30', '#34262b'], sky:'#0b0405', tint:'rgba(255,90,40,.10)' },
+  { name:'심연의 심장', fork:100, merge:502, join:566, rx:[286, 180, 74], bend:[-16, 0, 16],   opz:[172, 286, 400],
+    tile:['#0e1a1c', '#112024'], road:['#24383f', '#203339'], sky:'#03080a', tint:'rgba(60,200,220,.10)' },
+];
+let MAPK = MAPCFG[0], MAPCH = 0;
+const SL3 = [[-17, -26, '앞'], [17, -26, '앞'], [0, 24, '뒤']];
+const SL2 = [[-9, -24, '앞'], [9, 24, '뒤']];
+const SL6 = [[-52, -24, '앞'], [0, -24, '앞'], [52, -24, '앞'], [-52, 26, '뒤'], [0, 26, '뒤'], [52, 26, '뒤']];
 /* 길 위 진행 거리 d → 좌표 */
 function pathPos(r, d) {
   const R = ROADS[r]; d = Math.max(0, Math.min(R.len, d));
@@ -431,7 +442,7 @@ function pathPos(r, d) {
     const t = (d - R.cum[i - 1]) / ((R.cum[i] - R.cum[i - 1]) || 1), a = R.pts[i - 1], c = R.pts[i];
     return [a[0] + (c[0] - a[0]) * t, a[1] + (c[1] - a[1]) * t];
   }
-  return [R.pts[4][0], R.pts[4][1]];
+  const e = R.pts[R.pts.length - 1]; return [e[0], e[1]];
 }
 /* z좌표 → 길 위 진행 거리 (길은 z가 계속 늘어나는 방향이라 일대일로 대응한다) */
 function dOfZ(r, z) {
@@ -444,11 +455,6 @@ function dOfZ(r, z) {
 }
 /* 그 높이(z)에서 길의 중심 x */
 function roadCx(r, z) { return pathPos(r, dOfZ(r, z))[0]; }
-
-/* 배치 칸. 길마다 거점 3개(칸 2개씩) + 교차로 거점 1개(칸 4개) = 22칸.
-   카드는 많아야 10장 안팎이라 '어느 길 어느 거점에 몰아 둘지'가 선택이 된다. */
-const OUTPOSTS = [], ROOMS = [];
-const OP_Z = [185, 300, 415];
 function addOutpost(o, cells) {
   o.slots = []; const oi = OUTPOSTS.length;
   for (const [dx, dz, row] of cells) {
@@ -457,10 +463,25 @@ function addOutpost(o, cells) {
   }
   OUTPOSTS.push(o);
 }
-for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++)
-  addOutpost({ road:r, no:k + 1, name:ROAD_NAME[r].charAt(0) + (k + 1), x:ROAD_X[r], z:OP_Z[k] }, [[-9, -24, '앞'], [9, 24, '뒤']]);
-addOutpost({ road:3, no:1, name:'교차로', x:180, z:602 }, [[-36, -24, '앞'], [36, -24, '앞'], [-36, 26, '뒤'], [36, 26, '뒤']]);
+/* 장(章) 번호 ch(0~2)에 맞춰 길과 거점을 다시 짠다. 칸 수(NROOM)는 모든 장에서 같다. */
+function buildMap(ch) {
+  const c = MAPCFG[Math.max(0, Math.min(MAPCFG.length - 1, ch))]; MAPK = c; MAPCH = MAPCFG.indexOf(c);
+  FORK_Z = c.fork; MERGE_Z = c.merge; JOIN_Z = c.join; OP_Z = c.opz.slice();
+  const mid = (c.fork + c.merge) / 2;
+  for (let r = 0; r < 3; r++) {
+    const rx = c.rx[r]; ROAD_X[r] = rx;
+    const pts = [[180, Z_START], [rx, c.fork], [rx + c.bend[r], mid], [rx, c.merge], [180, c.join], [180, Z_END]], cum = [0];
+    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    ROADS[r] = { rx, pts, cum, len:cum[cum.length - 1] };
+  }
+  OUTPOSTS.length = 0; ROOMS.length = 0;
+  for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++)
+    addOutpost({ road:r, no:k + 1, name:ROAD_NAME[r].charAt(0) + (k + 1), x:roadCx(r, OP_Z[k]), z:OP_Z[k] }, k < 2 ? SL3 : SL2);
+  addOutpost({ road:3, no:1, name:'교차로', x:180, z:602 }, SL6);
+}
+buildMap(0);
 const NROOM = ROOMS.length;
+function chapterOf(stage) { return stage === ENDLESS ? MAPCFG.length - 1 : Math.min(MAPCFG.length - 1, Math.floor(stage / 5)); }
 /* 길 구분: 0~2 = A·B·C길, 3 = 교차로(합류 구간). 3이면 어느 길의 상대와도 맞붙는다. */
 function compat(a, b) { return a === 3 || b === 3 || a === b; }
 
@@ -522,13 +543,22 @@ const DEF = {
             art:{ shape:'burly', body:'#4a4a8a', accent:'#2a2a5a', hood:true, weapon:'staff', glow:'#8be9ff' } },
   champion:{ ico:'⚔️', side:'H', tier:'hero', name:'용사', hp:680, dmg:18, rng:30, cd:1.0, spd:20, rew:25, sc:51,
             art:{ shape:'burly', body:'#e8e2d0', accent:'#d8a83a', helm:true, weapon:'greatsword', cape:'#c43a3a', crest:'#ffd35a' } },
-  paladin: { ico:'👑', side:'H', tier:'hero', name:'성기사단장', hp:1120, dmg:24, rng:30, cd:1.0, spd:18, rew:45, sc:56,
+  paladin: { ico:'🛡️', side:'H', tier:'hero', name:'성기사단장', hp:1120, dmg:24, rng:30, cd:1.0, spd:18, rew:45, sc:56,
             art:{ shape:'burly', body:'#f4f4f4', accent:'#ffd35a', helm:true, weapon:'axe', cape:'#ffd35a', crest:'#ff6b6b' } },
+  /* ---- 5관문마다 나오는 중간보스(메인 용사). 그림은 임시로 기존 용사 그림을 크게 쓴다 ---- */
+  boss1:  { ico:'👑', side:'H', tier:'boss', name:'용사 카엘', hp:1400, dmg:20, rng:32, cd:1.0, spd:18, rew:120, sc:60, boss:true, skill:'rally', skname:'용사의 일갈',
+            art:{ shape:'burly', body:'#e8e2d0', accent:'#d8a83a', helm:true, weapon:'greatsword', cape:'#c43a3a', crest:'#ffd35a' } },
+  boss2:  { ico:'👑', side:'H', tier:'boss', name:'성기사단장 오르벨', hp:2300, dmg:26, rng:32, cd:1.0, spd:17, rew:200, sc:64, boss:true, skill:'aegis', skname:'성역의 방패',
+            art:{ shape:'burly', body:'#f4f4f4', accent:'#ffd35a', helm:true, weapon:'axe', cape:'#ffd35a', crest:'#ff6b6b' } },
+  boss3:  { ico:'👑', side:'H', tier:'boss', name:'대현자 이스라', hp:1900, dmg:34, rng:118, cd:2.2, spd:17, rew:320, sc:58, boss:true, skill:'smite', skname:'심판의 빛', aoe:true, shot:true,
+            art:{ shape:'burly', body:'#4a4a8a', accent:'#2a2a5a', hood:true, weapon:'staff', glow:'#8be9ff' } },
 };
+/* 보스 그림 별칭: 새 그림이 오기 전까지 기존 용사 그림을 쓴다 */
 /* 역할: 전열(tank)은 '도발' — 근접 공격은 전열부터 때려야 한다. 암살(assassin)·비행은 도발을 무시하고,
    원거리(ranged)는 지원 > 원거리 > 근접 > 전열 순으로 약한 쪽부터 노린다. */
 const ROLE = { slime:'tank', golem:'tank', goblin:'melee', imp:'melee', bat:'assassin', skel:'ranged', ghost:'ranged', witch:'ranged', dragon:'ranged',
-               vagrant:'melee', trainee:'tank', looter:'assassin', lancer:'tank', ranger:'ranged', cleric:'support', warlock:'ranged', champion:'tank', paladin:'tank' };
+               vagrant:'melee', trainee:'tank', looter:'assassin', lancer:'tank', ranger:'ranged', cleric:'support', warlock:'ranged', champion:'tank', paladin:'tank',
+               boss1:'tank', boss2:'tank', boss3:'ranged' };
 for (const k in ROLE) DEF[k].role = ROLE[k];
 DEF.cleric.heal = 0.08;   /* 아군 최대 체력의 비율로 회복 */
 const ROLE_PRI = { support:0, ranged:1, assassin:1, melee:2, tank:3 };
@@ -542,35 +572,59 @@ const TRAPSL  = Object.keys(DEF).filter(k => DEF[k].kind === 'trap');
 const RAR_COL  = { N:'#9aa0a6', R:'#5aa9ff', SR:'#c77dff', SSR:'#ffd35a' };
 const RAR_NAME = { N:'부하', R:'정예', SR:'권속', SSR:'마왕' };
 const RAR_RANK = { N:0, R:1, SR:2, SSR:3 };
-const TIER_COL  = { mob:'#9aa0a6', knight:'#8be9ff', hero:'#ffd35a' };
-const MAX_LV = 5, TRAP_SLOTS = 3, MSLOT_MAX = 7;
-const MSLOT_COST = { 5:300, 6:800, 7:2000 };
+const TIER_COL  = { mob:'#9aa0a6', knight:'#8be9ff', hero:'#ffd35a', boss:'#ff7a3a' };
+const MAX_LV = 5, MSLOT_MAX = 10, TSLOT_MAX = 8;
+/* 부하·함정 칸은 관문을 깰수록 늘어난다. 인덱스 = 돌파한 관문 수 */
+const MS_AT = [4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 9, 10, 10, 10, 10];
+const TS_AT = [3, 3, 4, 4, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 8];
+function mSlots(c) { c = c === undefined ? SAVE.cleared : c; return MS_AT[Math.max(0, Math.min(MS_AT.length - 1, c))]; }
+function tSlots(c) { c = c === undefined ? SAVE.cleared : c; return TS_AT[Math.max(0, Math.min(TS_AT.length - 1, c))]; }
+/* 다음에 칸이 늘어나는 관문(돌파 수 기준)과 새 칸 수 */
+function nextSlotInfo(kind) {
+  const f = kind === 'minion' ? mSlots : tSlots, cur = f(SAVE.cleared);
+  for (let c = SAVE.cleared + 1; c < MS_AT.length; c++) if (f(c) > cur) return { at:c, n:f(c) };
+  return null;
+}
 const lvMult = lv => 1 + 0.2 * (lv - 1);
 
-/* 웨이브 한 줄 = [적 종류, 수, 간격, 접두능력?] */
-const WAVES = [
-  [['vagrant',3,2.4]],
-  [['vagrant',4,2.0],['looter',1,1.6]],
-  [['trainee',4,1.9],['looter',2,1.4]],
-  [['vagrant',5,1.6],['ranger',1,2.0]],
-  [['trainee',5,1.6],['lancer',2,2.2],['cleric',1,1]],
-  [['looter',8,0.9],['warlock',2,2.0],['cleric',1,1]],
-  [['lancer',4,1.6],['ranger',4,1.4],['cleric',2,2]],
-  [['champion',1,1],['lancer',3,1.5],['ranger',3,1.4],['cleric',2,2]],
-  [['paladin',1,1],['champion',1,2],['lancer',4,1.3],['cleric',2,2]],
-  /* ---- 제4관문: 접두 능력 등장 ---- */
-  [['lancer',4,1.5],['ranger',3,1.4,'swift']],
-  [['trainee',8,0.9,'elite'],['cleric',2,2.0]],
-  [['champion',1,1,'armor'],['lancer',4,1.3],['warlock',2,2.0]],
-  /* ---- 제5관문 ---- */
-  [['looter',10,0.7,'swift'],['ranger',4,1.3,'elite']],
-  [['lancer',5,1.3,'armor'],['cleric',3,1.8],['warlock',3,1.8]],
-  [['champion',2,2.5],['ranger',5,1.2,'elite'],['cleric',2,2.0]],
-  /* ---- 제6관문 ---- */
-  [['paladin',1,1,'swift'],['lancer',5,1.3,'elite'],['cleric',2,1.8]],
-  [['champion',2,2.4,'rage'],['warlock',3,1.8,'elite'],['ranger',3,1.5]],
-  [['paladin',1,1,'elite'],['champion',2,2.4,'armor'],['cleric',3,1.8],['lancer',5,1.3]],
-];
+/* 웨이브 한 줄 = [적 종류, 수, 간격, 접두능력?]
+   관문 15개(5개씩 3장) 웨이브는 규칙으로 만든다. 같은 관문은 늘 같은 구성이 나오도록 씨앗 있는 난수를 쓴다.
+   뒤로 갈수록 한 웨이브 인원이 늘고(최대 12), 지원·원거리·정예·접두 능력이 차례로 섞인다.
+   5·10·15관문은 마지막에 보스 웨이브가 하나 더 붙는다. */
+const BOSS_OF = { 4:'boss1', 9:'boss2', 14:'boss3' };
+function genWave(s, w, bossKey) {
+  const rnd = rng32(s * 977 + w * 131 + 11);
+  let N = Math.min(12, Math.round(3 + 0.5 * s + 0.9 * w));
+  if (bossKey) N = Math.min(10, Math.round(4 + s * 0.35));
+  const cnt = {}, add = (t, n) => { if (n > 0) cnt[t] = (cnt[t] || 0) + n; };
+  let left = N;
+  if (!bossKey) {
+    if (s >= 5 && w === 2) { add(s >= 9 && rnd() < 0.5 ? 'paladin' : 'champion', 1); left -= 3; }
+    else if (s >= 11 && w === 1) { add('champion', 1); left -= 3; }
+  }
+  left = Math.max(2, left);
+  const nSup = s >= 2 ? Math.min(3, Math.floor(N / 5) + (bossKey ? 1 : 0)) : 0;
+  add('cleric', nSup); left -= nSup;
+  const nRng = s >= 3 ? Math.floor(left * 0.25) : 0;
+  for (let i = 0; i < nRng; i++) add(s >= 5 && (i + (rnd() < 0.5 ? 1 : 0)) % 2 ? 'warlock' : 'ranger', 1);
+  left -= nRng;
+  const nTank = Math.max(1, Math.round(left * 0.3));
+  for (let i = 0; i < nTank; i++) add(s >= 4 && rnd() < 0.5 ? 'lancer' : 'trainee', 1);
+  left -= nTank;
+  for (let i = 0; i < left; i++) add(s >= 1 && rnd() < 0.35 ? 'looter' : 'vagrant', 1);
+  const order = ['trainee', 'lancer', 'champion', 'paladin', 'vagrant', 'looter', 'ranger', 'warlock', 'cleric'];
+  const base = Math.max(0.55, 2.1 - s * 0.08);
+  const p = s >= 3 ? Math.min(0.55, 0.12 + 0.04 * (s - 3)) : 0;
+  const kinds = s < 8 ? ['elite', 'swift'] : s < 11 ? ['elite', 'swift', 'armor'] : ['elite', 'swift', 'armor', 'rage'];
+  const rows = [];
+  if (bossKey) rows.push([bossKey, 1, 2.6]);
+  for (const t of order) if (cnt[t]) {
+    const hero = t === 'champion' || t === 'paladin';
+    rows.push([t, cnt[t], hero ? 2.4 : base * (t === 'cleric' ? 1.2 : 1), (t !== 'cleric' && rnd() < p * 0.5) ? kinds[Math.floor(rnd() * kinds.length)] : null]);
+  }
+  return rows;
+}
+const WAVES = [];
 /* 새 그림 없이 적을 다양하게 만드는 접두 능력 */
 const AFFIX = {
   elite: { name:'정예', col:'#ffd35a', hp:1.65, dmg:1.25, spd:1.00, sc:1.14 },
@@ -578,14 +632,21 @@ const AFFIX = {
   armor: { name:'강철', col:'#c0c8d4', hp:1.40, dmg:1.10, spd:0.90, sc:1.08, dr:0.35 },
   rage:  { name:'광포', col:'#ff6b6b', hp:1.15, dmg:1.50, spd:1.15, sc:1.06, cd:0.72 },
 };
-const STAGES = [
-  { no:1, name:'바깥 통로',   from:0,  to:2,  mul:1.30, gems:140,  stone:190 },
-  { no:2, name:'지하 묘지',   from:3,  to:5,  mul:1.60, gems:320,  stone:220 },
-  { no:3, name:'옥좌의 길',   from:6,  to:8,  mul:0.80, gems:700,  stone:270 },
-  { no:4, name:'피의 회랑',   from:9,  to:11, mul:2.40, gems:1200, stone:320 },
-  { no:5, name:'봉인된 성소', from:12, to:14, mul:1.35, gems:2000, stone:370 },
-  { no:6, name:'심연의 왕좌', from:15, to:17, mul:1.30, gems:3500, stone:430 },
-];
+const STAGE_NAMES = ['바깥 통로', '지하 묘지', '돌의 회랑', '폐허의 문', '선봉대 막사',
+                     '성채 입구', '피의 회랑', '옥좌의 길', '봉인된 성소', '성기사단 본진',
+                     '심연 계단', '뒤틀린 서고', '불꽃의 광장', '어둠의 대성당', '심연의 왕좌'];
+const STAGE_GEMS = [140, 200, 280, 380, 800, 600, 780, 1000, 1300, 2600, 1800, 2300, 2900, 3600, 7000];
+const STAGE_MUL = [1.30, 1.40, 1.50, 1.60, 0.75, 0.80, 1.50, 0.72, 1.60, 1.00, 1.70, 1.90, 1.90, 2.00, 0.80];
+const STAGES = (() => {
+  const out = [];
+  for (let i = 0; i < 15; i++) {
+    const boss = BOSS_OF[i] || null, nW = boss ? 4 : 3, from = WAVES.length;
+    for (let w = 0; w < nW; w++) WAVES.push(genWave(i, w, boss && w === nW - 1 ? boss : null));
+    out.push({ no:i + 1, name:STAGE_NAMES[i], from, to:WAVES.length - 1, mul:STAGE_MUL[i], gems:STAGE_GEMS[i],
+               stone:190 + i * 30 + (boss ? 40 : 0), ch:Math.floor(i / 5), boss });
+  }
+  return out;
+})();
 /* 무한 모드: 끝없이 이어지는 웨이브를 그때그때 만들어 낸다 */
 const ENDLESS = -1;
 function affixFor(n) {
@@ -624,7 +685,7 @@ const PULL = { minion:{ one:100, ten:900 }, trap:{ one:80, ten:720 } };
 const SAVE_KEY = 'dungeon_lord_save_v5';
 function defaultSave() {
   return { gems:600, own:{ slime:1, goblin:1, golem:1, spikes:1, web:1 },
-           mteam:['golem','slime','goblin'], tteam:['spikes','web'], mslots:4, cleared:0, mute:false, endlessBest:0, adDay:'', adCount:0, battles:0 };
+           mteam:['golem','slime','goblin'], tteam:['spikes','web'], cleared:0, mute:false, endlessBest:0, adDay:'', adCount:0, battles:0 };
 }
 function loadSave() {
   try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.own && s.mteam) return s; } catch (e) {}
@@ -648,7 +709,7 @@ function doPull(cat, n) {
     if (!SAVE.own[key]) {
       SAVE.own[key] = 1; o.isNew = true;
       const team = DEF[key].kind === 'minion' ? SAVE.mteam : SAVE.tteam;
-      const cap = DEF[key].kind === 'minion' ? SAVE.mslots : TRAP_SLOTS;
+      const cap = DEF[key].kind === 'minion' ? mSlots() : tSlots();
       if (team.length < cap) team.push(key);
     } else if (SAVE.own[key] < MAX_LV) { SAVE.own[key]++; o.lvUp = true; }
     else { o.refund = 15; SAVE.gems += 15; }
@@ -662,18 +723,12 @@ function doPull(cat, n) {
 function toggleTeam(key) {
   if (!SAVE.own[key]) { L.msg = '아직 얻지 못한 카드예요'; return; }
   const isM = DEF[key].kind === 'minion';
-  const team = isM ? SAVE.mteam : SAVE.tteam, cap = isM ? SAVE.mslots : TRAP_SLOTS;
+  const team = isM ? SAVE.mteam : SAVE.tteam, cap = isM ? mSlots() : tSlots();
   const i = team.indexOf(key);
   if (i >= 0) team.splice(i, 1);
   else if (team.length >= cap) { L.msg = (isM ? '부하' : '함정') + ' 슬롯이 ' + cap + '칸으로 꽉 찼어요'; return; }
   else team.push(key);
   persist();
-}
-function buySlot() {
-  const next = SAVE.mslots + 1; if (next > MSLOT_MAX) return;
-  if (SAVE.gems < MSLOT_COST[next]) { L.msg = '수정 ' + MSLOT_COST[next] + '개가 필요해요'; return; }
-  SAVE.gems -= MSLOT_COST[next]; SAVE.mslots = next; persist();
-  L.msg = '부하 슬롯이 ' + next + '칸으로 늘었어요';
 }
 
 /* ================= 일러스트 자산 ================= */
@@ -840,7 +895,7 @@ function reset(stage) {
   G = { stage, endless, stone:S.stone, maxStone:S.stone, wIdx:0, phase:'prep', heroes:[], rooms:new Array(NROOM).fill(null),
         hand, sel:-1, parties:[], pending:[], plan:null, waveT:0, speed:1, fx:[], parts:[], meteors:[], bolts:[], corpses:[], revive:[],
         msg:'빈 칸을 누르고 카드를 배치하세요', msgT:4, gems:0, done:false, doubled:false, usedContinue:false,
-        scd, frenzy:0, seal:0, aim:null, moveFrom:-1, moveCd:0, hs:0 };
+        scd, frenzy:0, seal:0, aim:null, moveFrom:-1, moveCd:0, hs:0, smites:[] };
   G.plan = planWave();
 }
 reset(0);
@@ -850,7 +905,7 @@ function curStage() { return G.endless ? { no:'∞', name:'무한의 문' } : ST
 function startBattle(i) {
   if (!stageOpen(i)) { L.msg = i === ENDLESS ? '모든 관문을 돌파하면 열려요' : '앞 관문을 먼저 돌파해야 열려요'; return; }
   if (!SAVE.mteam.length) { L.msg = '부하를 최소 1명은 편성해야 해요'; return; }
-  reset(i); scene = 'game'; camSnap('prep');
+  buildMap(chapterOf(i)); reset(i); scene = 'game'; camSnap('prep');
 }
 function finishBattle() {
   if (G.done) return; G.done = true;
@@ -933,7 +988,35 @@ function fireTrap(b) {
 function hitstop(v) { if (v > G.hs) G.hs = v; }
 function punch(v) { if (v > camPunch) camPunch = v; }
 /* 침입자가 받는 피해. 강철 접두는 일부를 흘려낸다 */
-function dmgHero(h, amt) { const d = amt * (1 - (h.dr || 0)); h.hp -= d; h.hitT = 1; return d; }
+function dmgHero(h, amt) {
+  let d = amt * (1 - (h.dr || 0));
+  if (h.shield > 0) { const a = Math.min(h.shield, d); h.shield -= a; d -= a; }
+  h.hp -= d; h.hitT = 1; return d;
+}
+/* 보스 고유 능력: 일정 시간마다 저절로 쓴다 */
+function bossTick(h, dt) {
+  h.skT -= dt; if (h.skT > 0 || h.stun > 0) return;
+  const sk = h.def.skill, mates = G.heroes.filter(o => o.party === h.party);
+  const note = (col) => { fxRing(h.x, h.z, 120, col, 0.8); fxText(h.x, h.z - 10, h.def.skname + '!', col); say(h.def.name + '의 ' + h.def.skname + '!'); SFX.roar(); sev('bossskill', h, null, 0, { col, name:h.def.skname }); };
+  if (sk === 'rally') {
+    h.skT = 9;
+    for (const o of mates) { o.buffT = 6; o.hp = Math.min(o.maxHp, o.hp + o.maxHp * 0.06); }
+    note('#ffd35a');
+  } else if (sk === 'aegis') {
+    h.skT = 11;
+    for (const o of mates) { o.shield = o.maxHp * 0.16; o.shieldT = 8; }
+    note('#8be9ff');
+  } else if (sk === 'smite') {
+    h.skT = 8;
+    let best = null, bn = -1;
+    for (const b of G.rooms) if (b && b.def.kind === 'minion' && heroSees(h, b) && dist2(h.x, h.z, b.x, b.z) <= SEEK + 90) {
+      let n = 0; for (const o of G.rooms) if (o && o.def.kind === 'minion' && dist2(o.x, o.z, b.x, b.z) <= 70) n++;
+      if (n > bn) { bn = n; best = b; }
+    }
+    if (best) { G.smites.push({ x:best.x, z:best.z, t:1.3, dmg:h.dmg * 4, by:h }); fxRing(best.x, best.z, 70, '#fff3a8', 1.3); note('#fff3a8'); }
+    else h.skT = 2;
+  }
+}
 /* 맞은 쪽을 때린 방향으로 밀어낸다 */
 function knock(v, fx, fz, p) {
   const d = Math.hypot(fx, fz) || 1;
@@ -1008,7 +1091,8 @@ function spawnParty(pp) {
       cdm:A && A.cd ? A.cd : 1, dr:A && A.dr ? A.dr : 0, scl:A && A.sc ? A.sc : 1,
       road:P.road, party:P, fz, fx, d:Math.max(0, P.d + fz), fighting:false,
       cd:0.5 + Math.random() * 0.5, slow:0, stun:0, x:pos[0] + fx, z:pos[1], yaw:0, atk:0, hitT:0,
-      bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0, markT:0, dotT:0, dotDps:0 };
+      bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0, markT:0, dotT:0, dotDps:0,
+      boss:!!def.boss, skT:def.boss ? 5 : 0, buffT:0, shield:0, shieldT:0 };
     P.heroes.push(h); G.heroes.push(h);
   }
   G.parties.push(P);
@@ -1106,6 +1190,16 @@ function update(dt) {
   /* 아무도 서로를 때리지 못하는 교착이 생겨도 웨이브가 반드시 끝나도록, 너무 길어지면 침입자가 쇠약해진다 */
   if (G.waveT > 210) for (const h of G.heroes) h.hp -= h.maxHp * 0.02 * dt;
 
+  /* 보스 '심판의 빛': 예고 뒤에 한 곳에 떨어진다 */
+  for (const sm of G.smites) {
+    sm.t -= dt;
+    if (sm.t <= 0) {
+      fxRing(sm.x, sm.z, 70, '#fff3a8', 0.5); burst(sm.x, 14, sm.z, 20, '#fff3a8', 110); shake = Math.max(shake, 8); hitstop(0.06); SFX.boom();
+      for (const b of G.rooms) if (b && b.def.kind === 'minion' && dist2(b.x, b.z, sm.x, sm.z) <= 70) { b.hp -= sm.dmg; b.hitT = 1; fxText(b.x, b.z, '-' + Math.round(sm.dmg), '#fff3a8'); knock(b, b.x - sm.x, b.z - sm.z, 14); }
+    }
+  }
+  G.smites = G.smites.filter(sm => sm.t > 0);
+
   /* ===== 침입자 무리: 함께 걷고, 함께 멈춰서 싸운다 ===== */
   for (const P of G.parties) {
     P.heroes = P.heroes.filter(h => h.hp > 0);
@@ -1128,7 +1222,10 @@ function update(dt) {
     if (h.hitT > 0) h.hitT -= dt * 4.2;
     if (h.spawnT > 0) h.spawnT -= dt * 2.6;
     if (h.markT > 0) h.markT -= dt;
+    if (h.buffT > 0) h.buffT -= dt;
+    if (h.shieldT > 0) { h.shieldT -= dt; if (h.shieldT <= 0) h.shield = 0; }
     h.moving = Math.max(0, h.moving - dt * 6);
+    if (h.boss && G.seal <= 0) bossTick(h, dt);
     h.d = dOfZ(h.road, h.z);
     if (h.dotT > 0) {
       h.dotT -= dt; h.hp -= h.dotDps * dt; h.dotAcc = (h.dotAcc || 0) + h.dotDps * dt;
@@ -1166,7 +1263,7 @@ function update(dt) {
           const vic = df.aoe ? G.rooms.filter(b => b && b.def.kind === 'minion' && dist2(b.x, b.z, tg.x, tg.z) < 52) : [tg];
           const big = h.dmg >= 16;
           for (const v of vic) {
-            const c = v.markT > 0 && v.markBy !== h, amt = h.dmg * (c ? COMBO : 1);
+            const c = v.markT > 0 && v.markBy !== h, amt = h.dmg * (c ? COMBO : 1) * (h.buffT > 0 ? 1.3 : 1);
             v.markT = 0.8; v.markBy = h;
             v.hp -= amt; v.hitT = 1;
             fxText(v.x, v.z, (c ? '연계 ' : '') + '-' + Math.round(amt), c ? '#ffe36b' : '#ff6b6b');
@@ -1249,7 +1346,7 @@ function update(dt) {
           const ox = nx - b.hx, oz = nz - b.hz, od = Math.hypot(ox, oz);
           if (od > lim) { nx = b.hx + ox / od * lim; nz = b.hz + oz / od * lim; }
           /* 길 밖으로는 못 나간다 */
-          if (b.road < 3) nx = Math.max(ROAD_X[b.road] - 30, Math.min(ROAD_X[b.road] + 30, nx));
+          if (b.road < 3) { const cxr = roadCx(b.road, nz); nx = Math.max(cxr - 30, Math.min(cxr + 30, nx)); }
           else nx = Math.max(60, Math.min(300, nx));
           const mx = nx - b.x, mz = nz - b.z;
           b.x = nx; b.z = nz;
@@ -1527,8 +1624,8 @@ function drawLobby() {
   btn(W - 74, 32, 62, 20, SAVE.mute ? '소리 꺼짐' : '소리 켜짐', () => { SAVE.mute = !SAVE.mute; persist(); }, { bg:'#241d2e', fs:9, fc:SAVE.mute ? '#8a7aa5' : '#8be9ff' });
 
   const isM = L.tab === 'minion';
-  btn(12, 56, 164, 28, '부하  ' + SAVE.mteam.length + '/' + SAVE.mslots, () => { L.tab = 'minion'; L.info = null; }, { on:isM, bg:isM ? '#4a3a63' : '#1e1829', fs:12 });
-  btn(184, 56, 164, 28, '함정  ' + SAVE.tteam.length + '/' + TRAP_SLOTS, () => { L.tab = 'trap'; L.info = null; }, { on:!isM, bg:!isM ? '#4a3a63' : '#1e1829', fs:12 });
+  btn(12, 56, 164, 28, '부하  ' + SAVE.mteam.length + '/' + mSlots(), () => { L.tab = 'minion'; L.info = null; }, { on:isM, bg:isM ? '#4a3a63' : '#1e1829', fs:12 });
+  btn(184, 56, 164, 28, '함정  ' + SAVE.tteam.length + '/' + tSlots(), () => { L.tab = 'trap'; L.info = null; }, { on:!isM, bg:!isM ? '#4a3a63' : '#1e1829', fs:12 });
 
   const pool = isM ? MINIONS : TRAPSL, team = isM ? SAVE.mteam : SAVE.tteam;
   const cw = 110, chh = 112, cg = 6, cx0 = (W - (cw * 3 + cg * 2)) / 2, cy0 = 96;
@@ -1564,11 +1661,8 @@ function drawLobby() {
   } else txt(L.msg, W / 2, iy + 19, 11, '#ffe9a8', 'center');
 
   const sy = iy + 44;
-  if (isM) {
-    const nx = SAVE.mslots + 1;
-    if (nx <= MSLOT_MAX) btn(12, sy, W - 24, 28, '부하 슬롯 ' + SAVE.mslots + ' → ' + nx + '   ◆' + MSLOT_COST[nx], buySlot, { dis:SAVE.gems < MSLOT_COST[nx], bg:'#2b4a3a', fs:11 });
-    else btn(12, sy, W - 24, 28, '부하 슬롯 최대 (' + MSLOT_MAX + ')', () => {}, { dis:true, fs:11 });
-  } else btn(12, sy, W - 24, 28, '함정 슬롯은 ' + TRAP_SLOTS + '칸 고정', () => {}, { dis:true, fs:11 });
+  const ni = nextSlotInfo(isM ? 'minion' : 'trap'), cap = isM ? mSlots() : tSlots();
+  btn(12, sy, W - 24, 28, (isM ? '부하' : '함정') + ' 칸 ' + cap + (ni ? '  →  ' + ni.n + '칸 (' + ni.at + '관문 돌파 시)' : '  (최대)'), () => {}, { dis:true, fs:11 });
 
   const gy = sy + 34, cat = L.tab, p = PULL[cat], nm = isM ? '부하' : '함정';
   btn(12, gy, 165, 42, nm + ' 소환 ×1', () => doPull(cat, 1), { dis:SAVE.gems < p.one, bg:'#2a4659', fs:12, sub:'◆ ' + p.one, sc:'#8be9ff' });
@@ -1577,7 +1671,7 @@ function drawLobby() {
   const ty = gy + 50, left = adLeftToday();
   btn(12, ty, 165, 44, '광고 보고 ◆' + AD_DAILY_GEMS, claimDailyAd, { dis:left <= 0, bg:'#2b4a3a', fs:12,
       sub:left > 0 ? '오늘 ' + left + '회 남음' : '내일 다시 열려요', sc:left > 0 ? '#9ae8b5' : '#6b5a85' });
-  btn(183, ty, 165, 44, '출정하기', () => { scene = 'stages'; }, { bg:'#5d2f3f', on:true, fs:15,
+  btn(183, ty, 165, 44, '출정하기', () => { goStages(); }, { bg:'#5d2f3f', on:true, fs:15,
       sub:'관문 ' + SAVE.cleared + '/' + STAGES.length, sc:'#ffe9a8' });
   txt('부하 65% · 정예 27% · 권속 7% · 마왕 1%   /   중복은 레벨 업 (최대 ' + MAX_LV + ')', W / 2, ty + 60, 9, '#8a7aa5', 'center');
 
@@ -1604,34 +1698,60 @@ function drawLobby() {
 }
 
 /* ================= 출정 선택 ================= */
+/* 관문이 15개라 세로로 스크롤한다. 5관문마다 한 장(章)이고, 마지막 관문에는 보스(메인 용사)가 있다. */
+const SS = { y:0, init:false, max:0 };
+function goStages() { scene = 'stages'; SS.init = false; }
 function drawStages() {
   BTN = [];
   ctx.fillStyle = '#120e1a'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#171222';
   for (let y = 0; y < H; y += 22) for (let x = (y / 22 % 2) * 11; x < W; x += 22) ctx.fillRect(x, y, 21, 21);
-  txt('출정', 14, 26, 20, '#ffd9f0');
-  txt('◆ ' + SAVE.gems, W - 12, 26, 15, '#8be9ff', 'right');
-  btn(12, 44, 70, 24, '← 로비', () => { scene = 'lobby'; }, { bg:'#241d2e', fs:11 });
+  const TOP = 76, rh = 54, rg = 6, chH = 30;
+  /* 내용 높이 */
+  const bodyH = 3 * (chH + 5 * (rh + rg)) + 8 + 68 + 20 + 100;
+  SS.max = Math.max(0, bodyH - (H - TOP) + 10);
+  if (!SS.init) {
+    const i = Math.min(STAGES.length - 1, SAVE.cleared), ch = Math.floor(i / 5);
+    SS.y = ch * (chH + 5 * (rh + rg)) + chH + (i % 5) * (rh + rg) - 80; SS.init = true;
+  }
+  SS.y = Math.max(0, Math.min(SS.max, SS.y));
 
-  const y0 = 78, rh = 54, rg = 6;
-  STAGES.forEach((S, i) => {
-    const y = y0 + i * (rh + rg), open = stageOpen(i), done = SAVE.cleared > i;
-    BTN.push({ x:12, y, w:W - 24, h:rh, act:() => startBattle(i), label:'제' + S.no + '관문' });
-    ctx.fillStyle = done ? '#22402f' : open ? '#3f2433' : '#1a1524';
-    rbox(12, y, W - 24, rh, 8); ctx.fill();
-    ctx.strokeStyle = done ? '#4e8a66' : open ? '#ffd35a' : '#2e2640';
-    ctx.lineWidth = open && !done ? 2 : 1; rbox(12, y, W - 24, rh, 8); ctx.stroke();
-    ctx.globalAlpha = open ? 1 : 0.45;
-    txt('제' + S.no + '관문', 26, y + 18, 14, open ? '#fff' : '#6b5a85');
-    txt(S.name, 100, y + 18, 13, open ? '#ffe9a8' : '#6b5a85');
-    txt(open ? '웨이브 3 · 수호석 ' + S.stone : '앞 관문을 돌파하면 열려요', 26, y + 38, 10, '#9a8ab5');
-    txt(done ? '돌파함' : open ? '첫 돌파 ◆' + S.gems : '잠김', W - 26, y + 18, 11, done ? '#6bdc7a' : open ? '#8be9ff' : '#6b5a85', 'right');
-    if (done) txt('재도전 ◆' + Math.floor(S.gems * 0.35), W - 26, y + 38, 10, '#8be9ff', 'right');
-    ctx.globalAlpha = 1;
-  });
-
-  const ey = y0 + STAGES.length * (rh + rg) + 8, eopen = stageOpen(ENDLESS);
-  BTN.push({ x:12, y:ey, w:W - 24, h:68, act:() => startBattle(ENDLESS), label:'무한의 문' });
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TOP, W, H - TOP); ctx.clip();
+  let y = TOP - SS.y;
+  const addBtn = (x, yy, w, h, act, label) => {
+    const y1 = Math.max(yy, TOP), y2 = Math.min(yy + h, H);
+    if (y2 > y1) BTN.push({ x, y:y1, w, h:y2 - y1, act, label });
+  };
+  const CHCOL = ['#b9a4ff', '#ff9a7a', '#7adcd8'];
+  for (let ch = 0; ch < 3; ch++) {
+    txt('제' + (ch + 1) + '장 · ' + MAPCFG[ch].name, 14, y + 14, 13, CHCOL[ch]);
+    txt((ch * 5 + 1) + '~' + (ch * 5 + 5) + '관문', W - 14, y + 14, 10, '#8a7aa5', 'right');
+    y += chH;
+    for (let k = 0; k < 5; k++) {
+      const i = ch * 5 + k, S = STAGES[i], open = stageOpen(i), done = SAVE.cleared > i;
+      if (y + rh > TOP && y < H) {
+        addBtn(12, y, W - 24, rh, () => startBattle(i), '제' + S.no + '관문');
+        ctx.fillStyle = done ? '#22402f' : open ? (S.boss ? '#4a2a22' : '#3f2433') : '#1a1524';
+        rbox(12, y, W - 24, rh, 8); ctx.fill();
+        ctx.strokeStyle = done ? '#4e8a66' : open ? (S.boss ? '#ff9a4a' : '#ffd35a') : (S.boss ? '#5a3a2e' : '#2e2640');
+        ctx.lineWidth = open && !done ? 2 : 1; rbox(12, y, W - 24, rh, 8); ctx.stroke();
+        ctx.globalAlpha = open ? 1 : 0.5;
+        txt('제' + S.no + '관문', 26, y + 17, 14, open ? '#fff' : '#6b5a85');
+        txt(S.name, 100, y + 17, 13, open ? '#ffe9a8' : '#6b5a85');
+        let sub = '웨이브 ' + (S.to - S.from + 1) + ' · 수호석 ' + S.stone;
+        if (mSlots(i + 1) > mSlots(i)) sub += ' · 부하칸+1';
+        if (tSlots(i + 1) > tSlots(i)) sub += ' · 함정칸+1';
+        txt(open ? sub : '앞 관문을 돌파하면 열려요', 26, y + 36, 10, '#9a8ab5');
+        if (S.boss) txt('👑 ' + DEF[S.boss].name, 26, y + 49, 9, open ? '#ffb27a' : '#6b5a85');
+        txt(done ? '돌파함' : open ? '첫 돌파 ◆' + S.gems : '잠김', W - 26, y + 17, 11, done ? '#6bdc7a' : open ? '#8be9ff' : '#6b5a85', 'right');
+        if (done) txt('재도전 ◆' + Math.floor(S.gems * 0.35), W - 26, y + 36, 10, '#8be9ff', 'right');
+        ctx.globalAlpha = 1;
+      }
+      y += rh + rg;
+    }
+  }
+  const ey = y + 8, eopen = stageOpen(ENDLESS);
+  addBtn(12, ey, W - 24, 68, () => startBattle(ENDLESS), '무한의 문');
   ctx.fillStyle = eopen ? '#2d2150' : '#1a1524'; rbox(12, ey, W - 24, 68, 8); ctx.fill();
   ctx.strokeStyle = eopen ? '#c77dff' : '#2e2640'; ctx.lineWidth = eopen ? 2 : 1; rbox(12, ey, W - 24, 68, 8); ctx.stroke();
   ctx.globalAlpha = eopen ? 1 : 0.45;
@@ -1646,14 +1766,26 @@ function drawStages() {
   txt('침입자 접두 능력', 14, ly, 11, '#c9b8ff');
   const keys = Object.keys(AFFIX), lw = (W - 28) / 2;
   keys.forEach((k, i) => {
-    const A = AFFIX[k], x = 14 + (i % 2) * lw, y = ly + 20 + Math.floor(i / 2) * 20;
-    ctx.fillStyle = A.col; rbox(x, y - 7, 34, 14, 7); ctx.fill();
-    txt(A.name, x + 17, y, 9, '#141018', 'center');
+    const A = AFFIX[k], x = 14 + (i % 2) * lw, yy = ly + 20 + Math.floor(i / 2) * 20;
+    ctx.fillStyle = A.col; rbox(x, yy - 7, 34, 14, 7); ctx.fill();
+    txt(A.name, x + 17, yy, 9, '#141018', 'center');
     const d = k === 'elite' ? '체력·공격 상승' : k === 'swift' ? '매우 빠름' : k === 'armor' ? '피해 35% 감소' : '공격 속도 상승';
-    txt(d, x + 40, y, 9, '#9a8ab5');
+    txt(d, x + 40, yy, 9, '#9a8ab5');
   });
-  txt('쓰러진 부하는 잠시 뒤 제 방에서 다시 일어서요', 14, ly + 70, 9, '#8a7aa5');
-  txt('덱 편성은 로비에서 바꿀 수 있어요', 14, ly + 86, 9, '#8a7aa5');
+  txt('쓰러진 부하는 웨이브가 끝나면 모두 회복돼요', 14, ly + 70, 9, '#8a7aa5');
+  ctx.restore();
+
+  /* 고정 머리줄 (스크롤 위에 덮는다) */
+  ctx.fillStyle = '#120e1a'; ctx.fillRect(0, 0, W, TOP);
+  txt('출정', 14, 26, 20, '#ffd9f0');
+  txt('◆ ' + SAVE.gems, W - 12, 26, 15, '#8be9ff', 'right');
+  btn(12, 44, 70, 24, '← 로비', () => { scene = 'lobby'; }, { bg:'#241d2e', fs:11 });
+  txt('부하 칸 ' + mSlots() + ' · 함정 칸 ' + tSlots(), W - 12, 56, 10, '#9a8ab5', 'right');
+  if (SS.max > 0) {
+    ctx.fillStyle = 'rgba(200,180,255,.25)';
+    const th = Math.max(30, (H - TOP) * (H - TOP) / (H - TOP + SS.max)), ty = TOP + (H - TOP - th) * (SS.y / SS.max);
+    ctx.fillRect(W - 4, ty, 2, th);
+  }
 }
 
 /* ================= 전투 3D ================= */
@@ -1690,7 +1822,7 @@ function drawScene() {
 
   /* 바닥 — 큰 판 하나면 깊이 정렬이 깨지므로 타일로 쪼갠다 */
   for (let gx = 0; gx < 6; gx++) for (let gz = 0; gz < 10; gz++) {
-    pushBox(10 + 60 * gx + 30, -20, Z_START - 60 + 80 * gz + 40, 60, 20, 80, ((gx + gz) & 1) ? '#140e1f' : '#171024');
+    pushBox(10 + 60 * gx + 30, -20, Z_START - 60 + 80 * gz + 40, 60, 20, 80, ((gx + gz) & 1) ? MAPK.tile[0] : MAPK.tile[1]);
   }
   /* 길: 비스듬한 구간은 회전한 판을 이어 붙인다 */
   /* 길마다 색이 달라서 갈래가 한눈에 구분된다: A 붉은색, B 푸른색, C 초록색, 교차로 보라색 */
@@ -1701,17 +1833,18 @@ function drawScene() {
     const dx = x2 - x1, dz = z2 - z1, L = Math.hypot(dx, dz), yaw = Math.atan2(dx, dz), cc = ZCOL[zc === undefined ? 3 : zc][1];
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n;
-      pushBox(x1 + dx * t, -4, z1 + dz * t, w, 10, L / n - 1.5, mixc((i & 1) ? '#2e2545' : '#2a2140', cc, (i & 1) ? 0.20 : 0.15), yaw);
+      pushBox(x1 + dx * t, -4, z1 + dz * t, w, 10, L / n - 1.5, mixc((i & 1) ? MAPK.road[0] : MAPK.road[1], cc, (i & 1) ? 0.20 : 0.15), yaw);
       /* 길 가장자리 띠 */
       const nx = Math.cos(yaw), nz = -Math.sin(yaw);
-      for (const sd of [-1, 1]) pushBox(x1 + dx * t + nx * (w / 2 - 2) * sd, 2, z1 + dz * t + nz * (w / 2 - 2) * sd, 4, 4, L / n - 1.5, mixc('#2a2140', cc, 0.75), yaw);
+      for (const sd of [-1, 1]) pushBox(x1 + dx * t + nx * (w / 2 - 2) * sd, 2, z1 + dz * t + nz * (w / 2 - 2) * sd, 4, 4, L / n - 1.5, mixc(MAPK.road[1], cc, 0.75), yaw);
     }
   };
   for (let r = 0; r < 3; r++) {
-    const rx = ROAD_X[r];
-    roadSeg(180, Z_START + 10, rx, FORK_Z, 58, 4, r);
-    roadSeg(rx, FORK_Z, rx, MERGE_Z, 74, 10, r);
-    roadSeg(rx, MERGE_Z, 180, JOIN_Z, 58, 4, r);
+    const rx = ROAD_X[r], pp = ROADS[r].pts, last = pp.length - 2;
+    for (let i = 0; i < last; i++) {
+      const L0 = Math.hypot(pp[i + 1][0] - pp[i][0], pp[i + 1][1] - pp[i][1]);
+      roadSeg(pp[i][0], i === 0 ? pp[i][1] + 10 : pp[i][1], pp[i + 1][0], pp[i + 1][1], (i === 0 || i === last - 1) ? 58 : 74, Math.max(3, Math.ceil(L0 / 36)), r);
+    }
     /* 길목 기둥과 횃불 */
     for (const sx of [-1, 1]) for (const pz of [FORK_Z + 4, MERGE_Z - 4]) {
       const px = rx + sx * 46;
@@ -1724,7 +1857,7 @@ function drawScene() {
   /* 거점 발판 */
   for (const o of OUTPOSTS) {
     if (o.road < 3) pushBox(o.x, 0, o.z, 66, 8, 84, '#372d50');
-    else pushBox(o.x, 0, o.z, 150, 8, 100, '#372d50');
+    else pushBox(o.x, 0, o.z, 168, 8, 100, '#372d50');
   }
   /* 입구 */
   pushBox(140, 24, Z_START, 14, 48, 14, '#5a4330');
@@ -1735,7 +1868,7 @@ function drawScene() {
   for (let i = 0; i < NROOM; i++) {
     const r = ROOMS[i], b = G.rooms[i];
     const col = i === G.sel ? '#7a6630' : (G.moveFrom >= 0 && !b) ? '#2f5f3f' : b ? '#2a2440' : '#473c66';
-    pushBox(r.x, 3, r.z, 34, 7, 34, col);
+    pushBox(r.x, 3, r.z, 30, 7, 30, col);
   }
 
   pushBox(STONE.x, 2, STONE.z, 76, 12, 76, '#2a2242');
@@ -1934,6 +2067,7 @@ function drawGame() {
                 : '웨이브 ' + (G.wIdx + 1) + '/' + waveCount()) + '   ◆ +' + G.gems, 10, 28, 11, '#8be9ff');
   txt('수호석', 210, 12, 10, '#c9b8ff'); bar2(250, 8, 100, 9, G.stone / G.maxStone, '#8b5cf6');
   txt(Math.ceil(G.stone) + ' / ' + G.maxStone, 350, 28, 10, '#c9b8ff', 'right');
+  { const bh = G.heroes.find(h => h.boss); if (bh) { ctx.fillStyle = '#2a1608'; ctx.fillRect(0, 38, W, 4); ctx.fillStyle = '#ff9a4a'; ctx.fillRect(0, 38, W * Math.max(0, bh.hp / bh.maxHp), 4); } }
   if (G.frenzy > 0) txt('광기 ' + G.frenzy.toFixed(1) + 's', 150, 28, 10, '#ff6b6b');
   if (G.msgT > 0) { ctx.fillStyle = 'rgba(0,0,0,.62)'; ctx.fillRect(0, 42, W, 20); txt(G.msg, W / 2, 52, 11, '#ffe9a8', 'center'); }
   if (G.aim) { ctx.globalAlpha = 0.6 + Math.sin(T * 8) * 0.3; txt('운석을 떨어뜨릴 곳을 누르세요', 12, 76, 13, '#ffa94d'); ctx.globalAlpha = 1; }
@@ -2015,7 +2149,7 @@ function drawGame() {
     }
     if (G.doubled) { txt('수정 2배 적용됨', W / 2, by + 14, 12, '#6bdc7a', 'center'); by += 34; }
     btn(100, by, W - 200, 40, '나가기', () => {
-      scene = 'stages'; L.msg = '수정으로 부하와 함정을 더 모아보세요';
+      goStages(); L.msg = '수정으로 부하와 함정을 더 모아보세요';
       if (SAVE.battles % 3 === 0) ADS.interstitial();
     }, { fs:13 });
   }
@@ -2096,6 +2230,7 @@ cv.addEventListener('pointermove', e => {
   if (e.pointerId !== primaryId || !startPt) return;
   const off = Math.hypot(p[0] - startPt[0], p[1] - startPt[1]);
   if (off > maxMove) maxMove = off;
+  if (scene === 'stages' && maxMove > TAP_SLOP) { SS.y += prev[1] - p[1]; }
   if (orbiting && maxMove > TAP_SLOP) {
     cam.yaw -= (p[0] - prev[0]) * 0.009;
     cam.pitch = Math.max(0.22, Math.min(1.552, cam.pitch + (p[1] - prev[1]) * 0.006));
@@ -2113,7 +2248,7 @@ function endPointer(e) {
 }
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
-cv.addEventListener('wheel', e => { e.preventDefault(); cam.dist = Math.max(180, Math.min(900, cam.dist + e.deltaY * 0.6)); camManual = true; }, { passive:false });
+cv.addEventListener('wheel', e => { e.preventDefault(); if (scene === 'stages') { SS.y += e.deltaY * 0.6; return; } cam.dist = Math.max(180, Math.min(900, cam.dist + e.deltaY * 0.6)); camManual = true; }, { passive:false });
 
 /* ================= 루프 ================= */
 let last = performance.now();
@@ -2150,8 +2285,8 @@ function sev(k, a, b, amt, x) {
   q.push({ k, a, b, amt, x:x || {} });
 }
 function zoneOf(u, hero) { return hero ? (u.z >= MERGE_Z - 10 ? 3 : u.road) : u.road; }
-function stgY(row) { return STG.y0 + STG.h - 36 - row * 13; }
-function sprH(u) { return Math.min(100, u.def.sc * 1.9 * (u.scl || 1)) * (STG.fs || 1); }
+function stgY(row) { return STG.y0 + STG.h - 36 - row * 12; }
+function sprH(u) { return Math.min(u.def.boss ? 132 : 100, u.def.sc * 1.9 * (u.scl || 1)) * (STG.fs || 1); }
 
 /* ---------- 배경 (구역마다 한 번만 만들어 두고 옆으로 흘린다) ---------- */
 function stageBg(z) {
@@ -2204,6 +2339,7 @@ function stageSpark(x, y, n, col, pw, dir) {
 function stageLand(sb, ev) {
   const amt = ev.amt, x = ev.x, hh = sb.hpx || 60;
   sb.rec = 1;
+  if (amt < 0.5) { STG.nums.push({ x:sb.x, y:sb.by - hh * 0.8, txt:'방어', col:'#8be9ff', size:11, t:0 }); stageSpark(sb.x, sb.by - hh * 0.5, 5, '#8be9ff', 60, 0); return; }
   const big = amt >= sb.u.maxHp * 0.12 || amt >= 30;
   STG.nums.push({ x:sb.x + (Math.random() - 0.5) * 10, y:sb.by - hh * 0.78, txt:(x.combo ? '연계 ' : '') + '-' + Math.round(amt), col:x.combo ? '#ffe36b' : (x.col || '#fff'),
                   size:x.combo ? 15 : big ? 14 : 11, t:0 });
@@ -2240,7 +2376,7 @@ function stageEvents() {
 function stageZoneUpdate(dt) {
   if (STG.focus >= 0) { STG.zone = STG.focus; return; }
   const sc = [0, 0, 0, 0], hc = [0, 0, 0, 0];
-  for (const h of G.heroes) { const z = zoneOf(h, true); hc[z]++; sc[z] += h.fighting ? 3 : 1; }
+  for (const h of G.heroes) { const z = zoneOf(h, true); hc[z]++; sc[z] += (h.fighting ? 3 : 1) + (h.boss ? 8 : 0); }
   STG.zoneT += dt;
   let best = -1, bs = 0;
   for (let z = 0; z < 4; z++) if (sc[z] > bs) { bs = sc[z]; best = z; }
@@ -2253,27 +2389,32 @@ function stageZoneUpdate(dt) {
 }
 function stageLayout(dt) {
   const z = STG.zone, cx = W / 2;
-  let Hs = [], Ms = [];
+  let Hs = [], Ms = [], overH = 0, overM = 0;
   if (z >= 0) {
-    Hs = G.heroes.filter(h => zoneOf(h, true) === z).sort((a, b) => FORM[b.def.role] - FORM[a.def.role]).slice(0, 6);
+    Hs = G.heroes.filter(h => zoneOf(h, true) === z).sort((a, b) => ((b.boss ? 1 : 0) - (a.boss ? 1 : 0)) || (FORM[b.def.role] - FORM[a.def.role]));
+    overH = Math.max(0, Hs.length - 12); Hs = Hs.slice(0, 12);
     const lead = Hs.length ? Math.max(...Hs.map(h => h.z)) : null;
     let ms = G.rooms.filter(b => b && b.def.kind === 'minion' && b.road === z);
-    if (lead !== null) { ms = ms.filter(b => Math.abs(b.z - lead) <= 230 || b.atk > 0).sort((a, b) => Math.abs(a.z - lead) - Math.abs(b.z - lead)); }
+    if (lead !== null) { ms = ms.filter(b => Math.abs(b.z - lead) <= 260 || b.atk > 0).sort((a, b) => Math.abs(a.z - lead) - Math.abs(b.z - lead)); }
     else ms.sort((a, b) => a.z - b.z);
-    Ms = ms.slice(0, 5).sort((a, b) => FORM[b.def.role] - FORM[a.def.role]);
+    overM = Math.max(0, ms.length - 12);
+    Ms = ms.slice(0, 12).sort((a, b) => FORM[b.def.role] - FORM[a.def.role]);
   }
   let dmin = 1e9;
   for (const h of Hs) for (const m of Ms) dmin = Math.min(dmin, dist2(h.x, h.z, m.x, m.z));
   const mx = Math.max(Hs.length, Ms.length);
-  STG.fs = mx >= 5 ? 0.78 : mx === 4 ? 0.88 : 1;
-  const gapT = (Hs.length && Ms.length) ? Math.max(34, Math.min(92, 18 + dmin * 0.55)) : 92;
+  /* 많을수록 작게, 여러 줄로 겹쳐 세운다 */
+  STG.fs = mx >= 10 ? 0.62 : mx >= 7 ? 0.72 : mx >= 5 ? 0.82 : mx === 4 ? 0.9 : 1;
+  STG.R = mx >= 9 ? 3 : mx >= 4 ? 2 : 1;
+  const gapT = (Hs.length && Ms.length) ? Math.max(30, Math.min(88, 16 + dmin * 0.5)) : 88;
   STG.gap += (gapT - STG.gap) * Math.min(1, dt * 4);
-  const seen = new Set();
+  const seen = new Set(), R = STG.R;
   const put = (list, hero) => {
-    const n = list.length, avail = cx - STG.gap / 2 - 20 - 34, spacing = Math.max(14, Math.min(46, avail / Math.max(1, n - 1)));
+    const n = list.length, cols = Math.ceil(n / R), avail = cx - STG.gap / 2 - 20 - 30;
+    const spacing = Math.max(16, Math.min(48 * STG.fs + 8, avail / Math.max(1, cols - 1)));
     list.forEach((u, i) => {
       seen.add(u);
-      const row = i % 2, off = STG.gap / 2 + 20 + i * spacing + (row ? 8 : 0);
+      const col = Math.floor(i / R), row = i % R, off = STG.gap / 2 + 22 + col * spacing + row * 6;
       let s = STG.sp.get(u);
       if (!s) { s = { u, hero, x:hero ? -40 : W + 40, a:0, rec:0, heal:0, by:stgY(row), hpx:sprH(u) }; STG.sp.set(u, s); }
       s.tx = hero ? cx - off : cx + off; s.row = row;
@@ -2295,7 +2436,7 @@ function stageLayout(dt) {
     const tgt = z < 3 ? dOfZ(z, f.z) : f.z;
     STG.scroll += (tgt - STG.scroll) * Math.min(1, dt * 4);
   }
-  STG.nH = Hs.length; STG.nM = Ms.length;
+  STG.nH = Hs.length + overH; STG.nM = Ms.length + overM; STG.overH = overH; STG.overM = overM;
 }
 
 /* ---------- 매 프레임 ---------- */
@@ -2338,7 +2479,7 @@ function stageSprite(s) {
   const fly = u.def.fly ? 14 + Math.sin(T * 3 + (u.bobOff || 0)) * 3 : 0;
   const P = pose(u, 0);
   const h = s.hpx, w = im.naturalWidth * (h / im.naturalHeight);
-  const sc = s.row ? 0.93 : 1;
+  const sc = Math.pow(0.94, s.row);
   const x = s.x + dir * P.push * 1.3 - dir * s.rec * 7 + P.shk, y = s.by - P.y * 0.8 - fly;
   /* 그림자와 역할 표시 */
   ctx.save();
@@ -2346,6 +2487,10 @@ function stageSprite(s) {
   if (u.def.role === 'tank') {
     ctx.globalAlpha = (0.35 + Math.sin(T * 3) * 0.12) * s.a; ctx.strokeStyle = s.hero ? '#ff9a8a' : '#8be9ff'; ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.ellipse(s.x, s.by + 1, w * 0.36 * sc + 3, 7, 0, 0, 7); ctx.stroke();
+  }
+  if (u.shield > 0) {
+    ctx.globalAlpha = 0.55 + Math.sin(T * 8) * 0.15; ctx.strokeStyle = '#8be9ff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(s.x, s.by - h * 0.45, w * 0.42, h * 0.55, 0, 0, 7); ctx.stroke();
   }
   if (s.heal > 0) {
     ctx.globalAlpha = s.heal * 0.8; ctx.strokeStyle = '#7dff9b'; ctx.lineWidth = 2;
@@ -2475,6 +2620,20 @@ function drawStage() {
   }
   /* 구역이 바뀔 때 어두웠다 밝아진다 */
   if (STG.fade > 0) { ctx.globalAlpha = Math.min(1, STG.fade); ctx.fillStyle = '#000'; ctx.fillRect(0, y0, W, hh); ctx.globalAlpha = 1; }
+  /* 못 담은 인원 */
+  if (STG.overH) txt('+' + STG.overH, 12, y0 + hh - 16, 12, '#ff9a8a');
+  if (STG.overM) txt('+' + STG.overM, W - 12, y0 + hh - 16, 12, '#9ae8b5', 'right');
+  /* 보스 체력바 */
+  for (const sp of STG.sp.values()) if (sp.u.boss) {
+    const u = sp.u, bw = 190, bx = W / 2 - bw / 2, by = y0 + 30;
+    ctx.fillStyle = 'rgba(8,6,14,.78)'; rbox(bx - 6, by - 11, bw + 12, 26, 8); ctx.fill();
+    ctx.strokeStyle = '#ff9a4a'; ctx.lineWidth = 1.2; rbox(bx - 6, by - 11, bw + 12, 26, 8); ctx.stroke();
+    ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#ffd9a0';
+    ctx.fillText('👑 ' + u.def.name, W / 2, by - 3);
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(bx, by + 4, bw, 6);
+    ctx.fillStyle = '#ff9a4a'; ctx.fillRect(bx, by + 4, bw * Math.max(0, u.hp / u.maxHp), 6);
+    break;
+  }
   /* 머리표 */
   const label = (STG.zone < 0 ? '' : ZNAME[z]) + (STG.nH || STG.nM ? '  침입자 ' + STG.nH + ' vs 부하 ' + STG.nM : '  침입자를 기다리는 중…');
   ctx.font = 'bold 10px sans-serif';
@@ -2489,6 +2648,9 @@ function drawStage() {
   ctx.fillStyle = col[1]; ctx.fillRect(0, y0 + hh - 2, W, 2);
   ctx.restore();
 }
+
+/* 보스 그림 별칭: 새 그림이 오기 전까지 기존 용사 그림을 쓴다 */
+ART_IMG.boss1 = ART_IMG.champion; ART_IMG.boss2 = ART_IMG.paladin; ART_IMG.boss3 = ART_IMG.warlock;
 </script>
 </body>
 </html>
