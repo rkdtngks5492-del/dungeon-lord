@@ -410,73 +410,85 @@ const CRYSTAL = () => { const g = 0.5 + Math.sin(T * 2) * 0.3;
     [0, 0.46, 0, 0.62, 0.66, 0.62, '#8b5cf6', 0.78], [0, 0.88, 0, 0.34, 0.4, 0.34, dk('#8b5cf6', 1.0 + g * 0.3), 0.78],
     [0, 1.1, 0, 0.14, 0.2, 0.14, '#e4d4ff', 0.78]]; };
 
-/* ================= 던전 길 ================= */
-const PATH = [[30,74],[330,74],[330,196],[30,196],[30,318],[330,318],[330,440],[180,440],[180,486]];
-const SEG = []; let TOTAL = 0;
-for (let i = 0; i < PATH.length - 1; i++) { const l = Math.hypot(PATH[i+1][0]-PATH[i][0], PATH[i+1][1]-PATH[i][1]); SEG.push(l); TOTAL += l; }
-function posAt(d) {
-  d = Math.max(0, Math.min(TOTAL, d));
-  for (let i = 0; i < SEG.length; i++) {
-    if (d <= SEG[i] || i === SEG.length - 1) {
-      const t = SEG[i] ? d / SEG[i] : 0, a = PATH[i], b = PATH[i+1];
-      return [a[0] + (b[0]-a[0]) * t, a[1] + (b[1]-a[1]) * t];
-    }
-    d -= SEG[i];
+/* ================= 던전 구조 ================= */
+/* 곧은 통로 3줄 × 구역 3개.
+   복도가 구불구불하면 벽 하나 사이로 다른 통로가 붙어서 거리 계산이 꼬인다.
+   곧게 펴면 그 문제가 생길 수 없고, 거리도 그냥 직선거리로 맞는다. */
+const LANE_X = [85, 180, 275];      /* 왼쪽 / 가운데 / 오른쪽 줄 */
+const Z_START = 50;                  /* 입구 */
+const ZONES = [
+  { no:1, name:'입구 광장', z0:110, z1:250 },
+  { no:2, name:'중앙 회랑', z0:310, z1:450 },
+  { no:3, name:'옥좌 앞',   z0:510, z1:650 },
+];
+const Z_END = 700;
+const TOTAL = Z_END - Z_START;
+const STONE = { x:180, z:716 };
+const MAPC = { x:180, z:(Z_START + Z_END) / 2 };
+function zAt(d) { return Z_START + Math.max(0, Math.min(TOTAL, d)); }
+function zoneAt(z) { for (const Z of ZONES) if (z >= Z.z0 - 16 && z <= Z.z1 + 16) return Z; return null; }
+
+/* 배치 칸: 구역마다 3줄 × 3단 = 9칸, 전부 27칸.
+   카드는 많아야 10장이라 "어디에 몰아 둘지"가 선택이 된다. */
+const ROOMS = [];
+for (const Z of ZONES) {
+  for (let r = 0; r < 3; r++) {
+    const z = Z.z0 + 25 + r * 45;
+    /* 화면이 좌우 반전이라 번호가 왼쪽부터 읽히도록 역순으로 만든다 */
+    for (let l = 2; l >= 0; l--) ROOMS.push({ x:LANE_X[l], z, lane:l, zone:Z.no, d:z - Z_START });
   }
 }
-const NROOM = 8, ROOMS = [];
-for (let i = 1; i <= NROOM; i++) { const d = TOTAL * i / (NROOM + 1); const p = posAt(d); ROOMS.push({ d, x:p[0], z:p[1] }); }
-const STONE = { x:180, z:512 };
-const MAPC = { x:180, z:290 };
+const NROOM = ROOMS.length;
+function posAt(d) { return [180, zAt(d)]; }
 
 /* ================= 데이터 ================= */
 const DEF = {
-  slime:  { side:'D', kind:'minion', rar:'N', name:'슬라임', hp:280, spd:32, leash:96, dmg:11, rng:30, cd:0.9, sc:35,
+  slime:  { ico:'🟢', side:'D', kind:'minion', rar:'N', name:'슬라임', hp:280, spd:32, leash:96, dmg:11, rng:36, cd:0.9, sc:35,
             note:'단단한 몸으로 길을 틀어막음', art:{ shape:'blob', body:'#5fd96b' } },
-  goblin: { side:'D', kind:'minion', rar:'N', name:'고블린', hp:150, spd:54, leash:124, dmg:16, rng:30, cd:0.85, sc:35,
+  goblin: { ico:'👺', side:'D', kind:'minion', rar:'N', name:'고블린', hp:150, spd:54, leash:124, dmg:16, rng:36, cd:0.85, sc:35,
             note:'값싸고 균형 잡힌 근접 부하', art:{ shape:'burly', body:'#7bbf5a', skin:'#93cf6a', accent:'#b5572e', weapon:'dagger', eyes:'#2a1a10' } },
-  bat:    { side:'D', kind:'minion', rar:'N', name:'흡혈박쥐', hp:90, spd:78, leash:145, dmg:10, rng:38, cd:0.45, sc:32, fly:true,
+  bat:    { ico:'🦇', side:'D', kind:'minion', rar:'N', name:'흡혈박쥐', hp:90, spd:78, leash:145, dmg:10, rng:46, cd:0.45, sc:32, fly:true,
             note:'약하지만 쉴 새 없이 물어뜯음', art:{ shape:'flyer', body:'#7a5a9a', eyes:'#ffd35a' } },
-  skel:   { side:'D', kind:'minion', rar:'R', name:'해골 궁수', hp:105, dmg:18, rng:105, cd:0.95, shot:true, sc:36,
+  skel:   { ico:'💀', side:'D', kind:'minion', rar:'R', name:'해골 궁수', hp:105, dmg:18, rng:128, cd:0.95, shot:true, sc:36,
             note:'복도 끝까지 화살을 날림', art:{ shape:'burly', body:'#d8d2c4', skin:'#e8e2d4', accent:'#4a3a5a', weapon:'bow', eyes:'#ff5a5a' } },
-  imp:    { side:'D', kind:'minion', rar:'R', name:'임프', hp:135, spd:58, leash:124, dmg:25, rng:30, cd:0.75, sc:34,
+  imp:    { ico:'😈', side:'D', kind:'minion', rar:'R', name:'임프', hp:135, spd:58, leash:124, dmg:25, rng:36, cd:0.75, sc:34,
             note:'작은 몸에 흉악한 화력', art:{ shape:'burly', body:'#d9533f', skin:'#e0604a', accent:'#3a1a1a', horns:true, weapon:'club', horn:'#2a1414' } },
-  ghost:  { side:'D', kind:'minion', rar:'R', name:'원귀', hp:145, spd:26, leash:88, dmg:14, rng:80, cd:0.9, shot:true, slow:0.5, sc:38,
+  ghost:  { ico:'👻', side:'D', kind:'minion', rar:'R', name:'원귀', hp:145, spd:26, leash:88, dmg:14, rng:96, cd:0.9, shot:true, slow:0.5, sc:38,
             note:'스친 침입자를 느리게 만듦', art:{ shape:'wraith', body:'#b8d8f0', eyes:'#5ad8ff' } },
-  golem:  { side:'D', kind:'minion', rar:'SR', name:'돌 골렘', hp:760, spd:36, leash:128, dmg:30, rng:34, cd:1.2, sc:43,
+  golem:  { ico:'🗿', side:'D', kind:'minion', rar:'SR', name:'돌 골렘', hp:760, spd:36, leash:128, dmg:30, rng:42, cd:1.2, sc:43,
             note:'움직이는 성벽. 한 칸을 통째로 봉쇄', art:{ shape:'golem', body:'#7a6a5a', accent:'#b09a6a', eyes:'#ffb35a' } },
-  witch:  { side:'D', kind:'minion', rar:'SR', name:'마녀', hp:175, dmg:26, rng:112, cd:1.3, aoe:true, shot:true, sc:38,
+  witch:  { ico:'🧙', side:'D', kind:'minion', rar:'SR', name:'마녀', hp:175, dmg:26, rng:134, cd:1.3, aoe:true, shot:true, sc:38,
             note:'광역 마법으로 무리를 한 번에', art:{ shape:'burly', body:'#5a3a7a', accent:'#2a1a3a', hood:true, weapon:'staff', glow:'#c77dff', skin:'#e8d0c0' } },
-  dragon: { side:'D', kind:'minion', rar:'SSR', name:'흑룡', hp:540, dmg:48, rng:120, cd:1.2, aoe:true, shot:true, sc:46,
+  dragon: { ico:'🐉', side:'D', kind:'minion', rar:'SSR', name:'흑룡', hp:540, dmg:48, rng:148, cd:1.2, aoe:true, shot:true, sc:46,
             note:'긴 사거리 광역 브레스', art:{ shape:'dragon', body:'#c74a3a', accent:'#7a2020' } },
 
-  spikes: { side:'D', kind:'trap', rar:'N', name:'가시밭', dmg:14, rng:36, cd:1.0, sc:54, note:'범위 안에 꾸준한 피해' },
-  web:    { side:'D', kind:'trap', rar:'N', name:'거미줄', dmg:0, rng:48, cd:0.3, slow:0.42, sc:54, note:'피해는 없지만 강하게 묶음' },
-  rock:   { side:'D', kind:'trap', rar:'N', name:'낙석', dmg:32, rng:34, cd:2.2, sc:54, note:'느리지만 한 방이 묵직' },
-  fire:   { side:'D', kind:'trap', rar:'R', name:'화염 분출', dmg:19, rng:60, cd:1.0, sc:54, note:'넓은 범위를 태움' },
-  poison: { side:'D', kind:'trap', rar:'R', name:'독늪', dmg:8, rng:54, cd:0.5, slow:0.6, sc:54, note:'둔화와 지속 피해를 동시에' },
-  ice:    { side:'D', kind:'trap', rar:'R', name:'얼음 바닥', dmg:10, rng:52, cd:0.8, slow:0.32, sc:54, note:'기어가는 수준으로 느려짐' },
-  bolt:   { side:'D', kind:'trap', rar:'SR', name:'전격 룬', dmg:40, rng:64, cd:1.2, sc:54, note:'넓은 범위를 고전압으로' },
-  lava:   { side:'D', kind:'trap', rar:'SR', name:'용암 구덩이', dmg:29, rng:38, cd:0.45, sc:54, note:'좁지만 압도적인 화력' },
-  rift:   { side:'D', kind:'trap', rar:'SSR', name:'차원 균열', dmg:16, rng:50, cd:3.4, push:58, sc:54, note:'침입자를 입구 쪽으로 밀어냄' },
+  spikes: { ico:'🔺', side:'D', kind:'trap', rar:'N', name:'가시밭', dmg:14, rng:44, cd:1.0, sc:54, note:'범위 안에 꾸준한 피해' },
+  web:    { ico:'🕸️', side:'D', kind:'trap', rar:'N', name:'거미줄', dmg:0, rng:58, cd:0.3, slow:0.42, sc:54, note:'피해는 없지만 강하게 묶음' },
+  rock:   { ico:'🪨', side:'D', kind:'trap', rar:'N', name:'낙석', dmg:32, rng:42, cd:2.2, sc:54, note:'느리지만 한 방이 묵직' },
+  fire:   { ico:'🔥', side:'D', kind:'trap', rar:'R', name:'화염 분출', dmg:19, rng:72, cd:1.0, sc:54, note:'넓은 범위를 태움' },
+  poison: { ico:'☠️', side:'D', kind:'trap', rar:'R', name:'독늪', dmg:8, rng:65, cd:0.5, slow:0.6, sc:54, note:'둔화와 지속 피해를 동시에' },
+  ice:    { ico:'🧊', side:'D', kind:'trap', rar:'R', name:'얼음 바닥', dmg:10, rng:63, cd:0.8, slow:0.32, sc:54, note:'기어가는 수준으로 느려짐' },
+  bolt:   { ico:'⚡', side:'D', kind:'trap', rar:'SR', name:'전격 룬', dmg:40, rng:77, cd:1.2, sc:54, note:'넓은 범위를 고전압으로' },
+  lava:   { ico:'🌋', side:'D', kind:'trap', rar:'SR', name:'용암 구덩이', dmg:29, rng:46, cd:0.45, sc:54, note:'좁지만 압도적인 화력' },
+  rift:   { ico:'🌀', side:'D', kind:'trap', rar:'SSR', name:'차원 균열', dmg:16, rng:60, cd:3.4, push:58, sc:54, note:'침입자를 입구 쪽으로 밀어냄' },
 
-  vagrant:{ side:'H', tier:'mob', name:'떠돌이', hp:55, dmg:4, rng:26, cd:1.0, spd:30, rew:2, sc:34,
+  vagrant:{ ico:'🚶', side:'H', tier:'mob', name:'떠돌이', hp:55, dmg:4, rng:26, cd:1.0, spd:30, rew:2, sc:34,
             art:{ shape:'burly', body:'#b09878', accent:'#6a4a2a', weapon:'dagger', skin:'#f2cba3' } },
-  trainee:{ side:'H', tier:'mob', name:'견습병', hp:78, dmg:5, rng:26, cd:1.0, spd:26, rew:2, sc:35,
+  trainee:{ ico:'🛡️', side:'H', tier:'mob', name:'견습병', hp:78, dmg:5, rng:26, cd:1.0, spd:26, rew:2, sc:35,
             art:{ shape:'burly', body:'#7a8fb8', accent:'#c4cedc', helm:true, weapon:'sword' } },
-  looter: { side:'H', tier:'mob', name:'도굴꾼', hp:52, dmg:6, rng:24, cd:0.7, spd:46, rew:2, sc:34,
+  looter: { ico:'🗡️', side:'H', tier:'mob', name:'도굴꾼', hp:52, dmg:6, rng:24, cd:0.7, spd:46, rew:2, sc:34,
             art:{ shape:'burly', body:'#4a4452', accent:'#201a28', hood:true, weapon:'dagger' } },
-  lancer: { side:'H', tier:'knight', name:'창기사', hp:165, dmg:11, rng:28, cd:1.0, spd:26, rew:5, sc:40,
+  lancer: { ico:'🏇', side:'H', tier:'knight', name:'창기사', hp:165, dmg:11, rng:28, cd:1.0, spd:26, rew:5, sc:40,
             art:{ shape:'burly', body:'#aab4c4', accent:'#3a5a9a', helm:true, weapon:'spear', cape:'#2a4a8a' } },
-  ranger: { side:'H', tier:'knight', name:'궁기사', hp:95, dmg:9, rng:100, cd:1.2, spd:28, rew:5, shot:true, sc:39,
+  ranger: { ico:'🏹', side:'H', tier:'knight', name:'궁기사', hp:95, dmg:9, rng:100, cd:1.2, spd:28, rew:5, shot:true, sc:39,
             art:{ shape:'burly', body:'#4a7a5a', accent:'#2a4a3a', weapon:'bow' } },
-  cleric: { side:'H', tier:'knight', name:'사제', hp:105, dmg:4, rng:90, cd:1.7, spd:24, rew:6, heal:9, sc:39,
+  cleric: { ico:'✨', side:'H', tier:'knight', name:'사제', hp:105, dmg:4, rng:90, cd:1.7, spd:24, rew:6, heal:9, sc:39,
             art:{ shape:'burly', body:'#f0ead8', accent:'#d8b85a', weapon:'staff', glow:'#ffe9a8' } },
-  warlock:{ side:'H', tier:'knight', name:'마법사', hp:95, dmg:15, rng:105, cd:2.0, spd:24, rew:6, aoe:true, shot:true, sc:39,
+  warlock:{ ico:'🔮', side:'H', tier:'knight', name:'마법사', hp:95, dmg:15, rng:105, cd:2.0, spd:24, rew:6, aoe:true, shot:true, sc:39,
             art:{ shape:'burly', body:'#4a4a8a', accent:'#2a2a5a', hood:true, weapon:'staff', glow:'#8be9ff' } },
-  champion:{ side:'H', tier:'hero', name:'용사', hp:680, dmg:18, rng:30, cd:1.0, spd:20, rew:25, sc:51,
+  champion:{ ico:'⚔️', side:'H', tier:'hero', name:'용사', hp:680, dmg:18, rng:30, cd:1.0, spd:20, rew:25, sc:51,
             art:{ shape:'burly', body:'#e8e2d0', accent:'#d8a83a', helm:true, weapon:'greatsword', cape:'#c43a3a', crest:'#ffd35a' } },
-  paladin: { side:'H', tier:'hero', name:'성기사단장', hp:1120, dmg:24, rng:30, cd:1.0, spd:18, rew:45, sc:56,
+  paladin: { ico:'👑', side:'H', tier:'hero', name:'성기사단장', hp:1120, dmg:24, rng:30, cd:1.0, spd:18, rew:45, sc:56,
             art:{ shape:'burly', body:'#f4f4f4', accent:'#ffd35a', helm:true, weapon:'axe', cape:'#ffd35a', crest:'#ff6b6b' } },
 };
 const LORD_ART = { shape:'overlord', body:'#6b1f4a', accent:'#ff4a6a', skin:'#c88ab0', horns:true, horn:'#2a1020', cape:'#3a0f28', weapon:'greatsword', eyes:'#ff5a5a' };
@@ -524,11 +536,11 @@ const AFFIX = {
 };
 const STAGES = [
   { no:1, name:'바깥 통로',   from:0,  to:2,  mul:1.22, gems:140,  stone:190 },
-  { no:2, name:'지하 묘지',   from:3,  to:5,  mul:1.30, gems:320,  stone:220 },
-  { no:3, name:'옥좌의 길',   from:6,  to:8,  mul:1.32, gems:700,  stone:270 },
-  { no:4, name:'피의 회랑',   from:9,  to:11, mul:1.46, gems:1200, stone:320 },
-  { no:5, name:'봉인된 성소', from:12, to:14, mul:1.60, gems:2000, stone:370 },
-  { no:6, name:'심연의 왕좌', from:15, to:17, mul:1.72, gems:3500, stone:430 },
+  { no:2, name:'지하 묘지',   from:3,  to:5,  mul:1.40, gems:320,  stone:220 },
+  { no:3, name:'옥좌의 길',   from:6,  to:8,  mul:1.34, gems:700,  stone:270 },
+  { no:4, name:'피의 회랑',   from:9,  to:11, mul:1.44, gems:1200, stone:320 },
+  { no:5, name:'봉인된 성소', from:12, to:14, mul:1.50, gems:2000, stone:370 },
+  { no:6, name:'심연의 왕좌', from:15, to:17, mul:1.58, gems:3500, stone:430 },
 ];
 /* 무한 모드: 끝없이 이어지는 웨이브를 그때그때 만들어 낸다 */
 const ENDLESS = -1;
@@ -717,9 +729,20 @@ const SFX = (() => {
 const PI = Math.PI;
 /* 배치할 때는 위에서 내려다보는 평면 지도, 웨이브가 시작되면 낮은 3D 전투 시점으로 전환 */
 const CAMV = {
-  prep:   { yaw:PI, pitch:1.500, dist:640, ty:0,  tx:MAPC.x, tz:MAPC.z },
-  battle: { yaw:PI, pitch:0.58,  dist:480, ty:24, tx:MAPC.x, tz:MAPC.z },
+  prep:   { yaw:PI, pitch:1.505, dist:880, ty:0,  tx:MAPC.x, tz:MAPC.z },
+  battle: { yaw:PI, pitch:0.55,  dist:410, ty:30, tx:MAPC.x, tz:MAPC.z },
 };
+/* 구역 1/2/3을 바로 비추는 시점 */
+function zoneCam(i) {
+  const Z = ZONES[i];
+  return { yaw:PI, pitch:0.62, dist:430, ty:24, tx:MAPC.x, tz:(Z.z0 + Z.z1) / 2 + 40 };
+}
+function camToZone(i) {
+  camMode = 'zone' + i;
+  camAnim = { f:{ yaw:cam.yaw, pitch:cam.pitch, dist:cam.dist, ty:cam.ty, tx:cam.tx, tz:cam.tz },
+              t:zoneCam(i), p:0, dur:0.7 };
+  camFollow = false; camManual = true;
+}
 const cam = { yaw:PI, pitch:1.500, dist:640, tx:MAPC.x, ty:0, tz:MAPC.z };
 let camAnim = null, camFollow = false, camManual = false, camMode = 'prep', camPunch = 0;
 function camTo(mode, dur) {
@@ -744,9 +767,16 @@ function camStep(dt) {
   if (camFollow && !camManual && scene === 'game' && G.phase === 'run' && G.heroes.length) {
     let lead = G.heroes[0];
     for (const h of G.heroes) if (h.d > lead.d) lead = h;
-    const gx = (lead.x + STONE.x) / 2, gz = (lead.z + STONE.z) / 2;
-    cam.tx += (gx - cam.tx) * Math.min(1, dt * 1.6);
-    cam.tz += (gz - cam.tz) * Math.min(1, dt * 1.6);
+    /* 싸움이 붙은 자리를 잡는다: 선두 침입자 + 근처 수비 유닛의 중심 */
+    let fx = lead.x, fz = lead.z, n = 1;
+    for (const b of G.rooms) {
+      if (!b || b.def.kind !== 'minion') continue;
+      if (Math.abs(b.z - lead.z) > 165) continue;
+      fx += b.x; fz += b.z; n++;
+    }
+    const gx = MAPC.x + (fx / n - MAPC.x) * 0.55, gz = fz / n + 46;
+    cam.tx += (gx - cam.tx) * Math.min(1, dt * 1.8);
+    cam.tz += (gz - cam.tz) * Math.min(1, dt * 1.8);
   }
 }
 const FOV = 540, VCX = W / 2, VCY = PANEL_Y / 2 + 10;
@@ -854,7 +884,8 @@ function spawnHero(type, af) {
   G.heroes.push({ type, def, af, A, hp, maxHp:hp,
     dmg:def.dmg * sc * (A ? A.dmg : 1), spd:def.spd * (A ? A.spd : 1),
     cdm:A && A.cd ? A.cd : 1, dr:A && A.dr ? A.dr : 0, scl:A && A.sc ? A.sc : 1,
-    d:0, cd:0.5, slow:0, stun:0, x:PATH[0][0], z:PATH[0][1], yaw:0, atk:0, hitT:0, bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 });
+    lane:Math.floor(Math.random() * 3), zone:0,
+    d:0, cd:0.5, slow:0, stun:0, x:180, z:Z_START, yaw:0, atk:0, hitT:0, bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 });
 }
 function place(key) {
   if (G.sel < 0) { say('먼저 빈 방을 선택하세요'); return; }
@@ -862,7 +893,7 @@ function place(key) {
   if (!G.hand[key]) { say('이 카드는 이미 배치했어요'); return; }
   const def = DEF[key]; G.hand[key]--;
   const s = ROOMS[G.sel], m = lvMult(SAVE.own[key] || 1), hp = (def.hp || 1) * m;
-  G.rooms[G.sel] = { key, def, hp, maxHp:hp, dmg:(def.dmg || 0) * m, cd:0, x:s.x, z:s.z, hx:s.x, hz:s.z, d:s.d, yaw:0, atk:0, hitT:0, bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 };
+  G.rooms[G.sel] = { key, def, hp, maxHp:hp, dmg:(def.dmg || 0) * m, cd:0, x:s.x, z:s.z, hx:s.x, hz:s.z, d:s.d, homeD:s.d, yaw:0, atk:0, hitT:0, bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 };
   burst(s.x, 10, s.z, 10, '#c9b8ff', 40); G.sel = -1; SFX.place();
 }
 function pickUp() {
@@ -881,7 +912,7 @@ function doMove(to) {
   if (from < 0 || !G.rooms[from] || G.rooms[to]) { say('빈 방으로만 옮길 수 있어요'); return; }
   const u = G.rooms[from], s = ROOMS[to];
   burst(u.x, 12, u.z, 8, '#6bdc7a', 40);
-  u.x = s.x; u.z = s.z; u.hx = s.x; u.hz = s.z; u.d = s.d; u.cd = Math.max(u.cd, 0.3);
+  u.x = s.x; u.z = s.z; u.hx = s.x; u.hz = s.z; u.d = s.d; u.homeD = s.d; u.cd = Math.max(u.cd, 0.3);
   G.rooms[to] = u; G.rooms[from] = null; G.sel = to;
   burst(s.x, 12, s.z, 8, '#6bdc7a', 40);
   if (G.phase === 'run') G.moveCd = MOVE_CD;
@@ -924,7 +955,7 @@ function update(dt) {
     r.t -= dt;
     if (r.t <= 0 && !G.rooms[r.i]) {
       G.rooms[r.i] = { key:r.key, def:r.def, hp:r.maxHp, maxHp:r.maxHp, dmg:r.dmg, cd:0,
-                       x:r.hx, z:r.hz, hx:r.hx, hz:r.hz, d:r.d, yaw:0, atk:0, hitT:0,
+                       x:r.hx, z:r.hz, hx:r.hx, hz:r.hz, d:r.d, homeD:r.d, yaw:0, atk:0, hitT:0,
                        bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 };
       burst(r.hx, 14, r.hz, 12, '#c77dff', 60); SFX.place();
       r.done = true;
@@ -972,7 +1003,7 @@ function update(dt) {
         h.cd = df.cd * h.cdm; h.atk = 1;
         if (df.shot) { fxShot(h.x, h.z, tg.x, tg.z, '#ffd35a'); SFX.shoot(); }
         else { fxSlash(tg.x, tg.z, '#ffd9a0'); SFX.swing(); }
-        const vic = df.aoe ? G.rooms.filter(b => b && b.def.kind === 'minion' && dist2(b.x, b.z, tg.x, tg.z) < 46) : [tg];
+        const vic = df.aoe ? G.rooms.filter(b => b && b.def.kind === 'minion' && dist2(b.x, b.z, tg.x, tg.z) < 52) : [tg];
         const big = h.dmg >= 16;
         for (const v of vic) {
           v.hp -= h.dmg; v.hitT = 1;
@@ -993,7 +1024,14 @@ function update(dt) {
       }
       const px = h.x, pz = h.z;
       h.d += h.spd * (h.slow > 0 ? (h.slowF || 0.5) : 1) * dt;
-      const p = posAt(h.d); h.x = p[0]; h.z = p[1];
+      h.z = zAt(h.d);
+      const Z = zoneAt(h.z);
+      if (Z) {
+        /* 새 구역에 들어서면 줄을 다시 고른다 */
+        if (h.zone !== Z.no) { h.zone = Z.no; h.lane = Math.floor(Math.random() * 3); }
+        h.tx = LANE_X[h.lane];
+      } else { h.zone = 0; h.tx = 180; }
+      h.x += ((h.tx === undefined ? 180 : h.tx) - h.x) * Math.min(1, dt * 2.6);
       const dx = h.x - px, dz = h.z - pz;
       if (Math.abs(dx) + Math.abs(dz) > 0.01) {
         h.yaw = Math.atan2(dx, dz); h.moving = 1;
@@ -1002,29 +1040,37 @@ function update(dt) {
     }
   }
 
-  /* 부하 이동: 행동 반경 안으로 들어온 침입자를 마중 나가 막는다 */
+  /* 부하 이동: 행동 반경 안으로 들어온 침입자를 마중 나가 막는다.
+     거리는 전부 '복도를 따라간 거리'로 잰다. 직선으로 재면 벽 하나 사이로
+     붙어 있는 다른 복도의 적을 인식하고 벽을 뚫고 걸어간다. */
   for (const b of G.rooms) if (b && b.moving > 0) b.moving = Math.max(0, b.moving - dt * 6);
   for (const b of G.rooms) {
     if (!b || b.def.kind !== 'minion' || !b.def.spd) continue;
-    const lim = b.def.leash, chase = lim * 1.75;
+    const lim = b.def.leash, chase = lim * 1.5;
     let tg = null, best = 1e9;
     for (const h of G.heroes) {
-      const dh = dist2(b.hx, b.hz, h.x, h.z);
+      const dh = dist2(b.hx, b.hz, h.x, h.z);      /* 제 자리 기준 */
       if (dh > chase) continue;
-      /* 반경 안이거나, '나를 때릴 수 있는 위치'에 있으면 쫓아간다.
-         이 예외가 없으면 사거리가 긴 적이 반경 바로 바깥에 서서 일방적으로 때린다 */
       const dd = dist2(b.x, b.z, h.x, h.z);
+      /* 반경 밖이어도 '나를 때릴 수 있는 위치'면 쫓아간다 */
       if (dh > lim && dd > h.def.rng + 10) continue;
       if (dd < best) { best = dd; tg = h; }
     }
     let gx = null, gz = 0;
     if (tg) { if (best > b.def.rng * 0.78) { gx = tg.x; gz = tg.z; } }
-    else if (dist2(b.x, b.z, b.hx, b.hz) > 3) { gx = b.hx; gz = b.hz; }
+    else if (dist2(b.x, b.z, b.hx, b.hz) > 2) { gx = b.hx; gz = b.hz; }
     if (gx !== null) {
-      const dx = gx - b.x, dz = gz - b.z, d = Math.hypot(dx, dz);
-      if (d > 1) {
-        const stp = Math.min(d, b.def.spd * dt);
-        b.x += dx / d * stp; b.z += dz / d * stp; b.yaw = Math.atan2(dx, dz); b.moving = 1;
+      let dx = gx - b.x, dz = gz - b.z;
+      const dl = Math.hypot(dx, dz);
+      if (dl > 1) {
+        const stp = Math.min(dl, b.def.spd * dt);
+        let nx = b.x + dx / dl * stp, nz = b.z + dz / dl * stp;
+        /* 제 자리에서 행동 반경 밖으로는 못 나간다 */
+        const ox = nx - b.hx, oz = nz - b.hz, od = Math.hypot(ox, oz);
+        if (od > lim) { nx = b.hx + ox / od * lim; nz = b.hz + oz / od * lim; }
+        const mx = nx - b.x, mz = nz - b.z;
+        b.x = nx; b.z = nz;
+        if (Math.abs(mx) + Math.abs(mz) > 0.01) { b.yaw = Math.atan2(mx, mz); b.moving = 1; }
       }
     }
   }
@@ -1039,13 +1085,13 @@ function update(dt) {
     if (b.spawnT > 0) b.spawnT -= dt * 2.6;
     if (b.cd > 0) continue;
     let tg = null, best = 1e9;
-    for (const h of G.heroes) { const dd = dist2(b.x, b.z, h.x, h.z); if (dd <= b.def.rng && dd < best) { best = dd; tg = h; } }
+    for (const h of G.heroes) { const dd = dist2(h.x, h.z, b.x, b.z); if (dd <= b.def.rng && dd < best) { best = dd; tg = h; } }
     if (tg) {
       b.cd = b.def.cd * fr; b.atk = 1;
       b.yaw = Math.atan2(tg.x - b.x, tg.z - b.z);
       if (b.def.shot) { fxShot(b.x, b.z, tg.x, tg.z, '#e8e8ff'); if (b.def.aoe) SFX.magic(); else SFX.shoot(); }
       else { fxSlash(tg.x, tg.z, '#ffffff'); SFX.swing(); }
-      const vic = b.def.aoe ? G.heroes.filter(h => dist2(h.x, h.z, tg.x, tg.z) < 46) : [tg];
+      const vic = b.def.aoe ? G.heroes.filter(h => dist2(h.x, h.z, tg.x, tg.z) < 52) : [tg];
       const big2 = b.dmg >= 18;
       for (const v of vic) {
         const dd = dmgHero(v, b.dmg);
@@ -1060,9 +1106,9 @@ function update(dt) {
   for (const b of G.rooms) {
     if (!b || b.def.kind !== 'trap') continue;
     b.cd -= dt;
-    if (b.def.slow) for (const h of G.heroes) if (dist2(b.x, b.z, h.x, h.z) <= b.def.rng) { h.slow = 0.3; h.slowF = b.def.slow; }
+    if (b.def.slow) for (const h of G.heroes) if (dist2(h.x, h.z, b.x, b.z) <= b.def.rng) { h.slow = 0.3; h.slowF = b.def.slow; }
     if (b.cd > 0) continue;
-    const hit = G.heroes.filter(h => dist2(b.x, b.z, h.x, h.z) <= b.def.rng);
+    const hit = G.heroes.filter(h => dist2(h.x, h.z, b.x, b.z) <= b.def.rng);
     if (hit.length) {
       b.cd = b.def.cd; b.flash = 0.2; if (b.dmg >= 26) { SFX.hitHard(0.8); hitstop(0.035); } else if (b.dmg > 0) SFX.hitSoft();
       for (const h of hit) {
@@ -1078,7 +1124,7 @@ function update(dt) {
     G.corpses.push({ key:b.key, def:b.def, x:b.x, z:b.z, yaw:b.yaw, t:1, dir:Math.random() < 0.5 ? -1 : 1 });
     /* 부하는 사라지지 않고 제 방에서 다시 일어선다. 긴 웨이브에서 전멸하지 않게 하는 핵심 장치 */
     const full = REVIVE[b.def.rar] || 12;
-    G.revive.push({ i, key:b.key, def:b.def, maxHp:b.maxHp, dmg:b.dmg, hx:b.hx, hz:b.hz, d:b.d, t:full, full });
+    G.revive.push({ i, key:b.key, def:b.def, maxHp:b.maxHp, dmg:b.dmg, hx:b.hx, hz:b.hz, d:b.homeD, t:full, full });
     G.rooms[i] = null; SFX.die(); hitstop(0.05);
   }
   for (const h of G.heroes) if (h.hp <= 0) {
@@ -1096,14 +1142,14 @@ function update(dt) {
       G.wIdx++; G.phase = 'prep';
       for (const r of G.revive) if (!G.rooms[r.i]) {
         G.rooms[r.i] = { key:r.key, def:r.def, hp:r.maxHp, maxHp:r.maxHp, dmg:r.dmg, cd:0,
-                         x:r.hx, z:r.hz, hx:r.hx, hz:r.hz, d:r.d, yaw:0, atk:0, hitT:0,
+                         x:r.hx, z:r.hz, hx:r.hx, hz:r.hz, d:r.d, homeD:r.d, yaw:0, atk:0, hitT:0,
                          bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 };
       }
       G.revive = [];
       const used = {}; for (const b of G.rooms) if (b) used[b.key] = (used[b.key] || 0) + 1;
       const hand = {}; for (const k of SAVE.mteam.concat(SAVE.tteam)) hand[k] = used[k] ? 0 : 1;
       G.hand = hand;
-      for (const b of G.rooms) if (b) { b.hp = b.maxHp; b.x = b.hx; b.z = b.hz; }
+      for (const b of G.rooms) if (b) { b.hp = b.maxHp; b.x = b.hx; b.z = b.hz; b.d = b.homeD; }
       G.moveCd = 0; camTo('prep', 1.2);
       say('웨이브 돌파! 수정 +' + WAVE_GEMS + ' · 부하 회복 · 쓰러진 카드 복귀');
     }
@@ -1219,6 +1265,57 @@ function bar2(x, y, w, h, ratio, col) {
   ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(x, y, w, h);
   ctx.fillStyle = col; ctx.fillRect(x, y, Math.max(0, w * Math.min(1, ratio)), h);
 }
+/* 참고 이미지처럼: 머리 위에 동그란 아이콘 + 옆에 붙은 체력바 */
+function drawPlates(Q) {
+  if (!Q.length) return;
+  const out = [];
+  for (const q of Q) {
+    const s2 = proj(q[1], q[2], q[3]); if (!s2) continue;
+    const k = RT.fov / s2[2];
+    let r = 13 * k; if (r < 6) r = 6; if (r > 20) r = 20;
+    if (q[7] === 2) r *= 0.72;
+    out.push({ z:s2[2], x:s2[0], y:s2[1] - q[6] * k - r - 5, r, q });
+  }
+  /* 가까운 것부터 자리를 잡고, 겹치는 것은 위로 밀어 올려 서로 가리지 않게 한다 */
+  out.sort((a, b) => a.z - b.z);
+  const put = [];
+  for (const o of out) {
+    const w = o.q[5] >= 0 ? o.r * 3.4 : o.r * 2;
+    o.l = o.x - o.r; o.rr = o.x - o.r + w;
+    for (let t = 0; t < 14; t++) {
+      let hit = false;
+      for (const u of put) {
+        if (o.rr < u.l || o.l > u.rr) continue;
+        const gap = (o.r + u.r) * 0.92;
+        if (Math.abs(o.y - u.y) < gap) { o.y = u.y - gap; hit = true; }
+      }
+      if (!hit) break;
+    }
+    put.push(o);
+  }
+  out.sort((a, b) => b.z - a.z);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const o of out) {
+    const q = o.q, hp = q[5], hero = q[7], r = o.r, cx = o.x, cy = o.y;
+    if (hp >= 0) {
+      const bw = r * 2.5, bh = r * 0.6, bx = cx + r * 0.78, by = cy - bh / 2;
+      ctx.fillStyle = 'rgba(8,5,14,.75)'; rbox(bx - 2, by - 2, bw + 4, bh + 4, bh * 0.7 + 2); ctx.fill();
+      ctx.fillStyle = 'rgba(44,32,58,.95)'; rbox(bx, by, bw, bh, bh * 0.5); ctx.fill();
+      const w2 = Math.max(bh, bw * Math.max(0, Math.min(1, hp)));
+      ctx.fillStyle = hero ? '#e8574c' : '#5fd071'; rbox(bx, by, w2, bh, bh * 0.5); ctx.fill();
+      ctx.fillStyle = hero ? 'rgba(255,176,166,.45)' : 'rgba(192,255,202,.45)';
+      rbox(bx, by, w2, bh * 0.4, bh * 0.3); ctx.fill();
+    }
+    ctx.globalAlpha = hero === 2 ? 0.8 : 1;
+    ctx.fillStyle = 'rgba(12,8,20,.92)'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
+    ctx.strokeStyle = q[4]; ctx.lineWidth = Math.max(1.4, r * 0.17);
+    ctx.beginPath(); ctx.arc(cx, cy, r - ctx.lineWidth * 0.5, 0, 7); ctx.stroke();
+    ctx.font = (r * 1.2) + 'px sans-serif';
+    ctx.fillText(q[0], cx, cy + r * 0.06);
+    ctx.globalAlpha = 1;
+  }
+}
+
 let BTN = [];
 function btn(x, y, w, h, label, act, o) {
   o = o || {}; BTN.push({ x, y, w, h, act, label });
@@ -1389,7 +1486,7 @@ function drawStages() {
 }
 
 /* ================= 전투 3D ================= */
-const CW = 54;
+const ZONE_X0 = 50, ZONE_X1 = 310, ZONE_W = ZONE_X1 - ZONE_X0;
 /* 정지 그림 한 장으로 생동감을 만드는 자세 계산.
    숨쉬기 / 걷기 통통 / 공격 준비-내지름 / 피격 떨림·납작 / 등장 */
 function pose(u, baseY) {
@@ -1398,8 +1495,7 @@ function pose(u, baseY) {
   const t = T + (u.bobOff || 0);
   const idle = Math.sin(t * 2.3) * 1.3;
   const step = walk * Math.abs(Math.sin(t * 9.5)) * 5;
-  /* 준비(천천히 뒤로) → 가격(순간적으로 앞으로) → 복귀(부드럽게).
-     일정한 속도로 왔다갔다하면 타격감이 죽는다 */
+  /* 준비(천천히 뒤로) → 가격(순간적으로 앞으로) → 복귀(부드럽게) */
   let push = 0, tilt = 0;
   if (atk > 0) {
     const pr = 1 - atk;
@@ -1414,61 +1510,75 @@ function pose(u, baseY) {
   return { y:baseY + idle + step + sp * 30, push, shk, kx:u.kbx || 0, kz:u.kbz || 0,
            o:{ tilt, sx, sy, flash:hit, alpha:1 - sp * 0.7, flip:Math.sin((u.yaw || 0) + cam.yaw) < 0 } };
 }
-const PILLARS = [[100,135],[260,135],[100,257],[260,257],[100,379],[250,379]];
+
 function drawScene() {
   cam.dist -= camPunch;
   const sk = shake > 0 ? shake : 0;
   const ox = sk ? (Math.random() - 0.5) * sk : 0, oy = sk ? (Math.random() - 0.5) * sk : 0;
   beginScene(ctx, cam, VCX + ox, VCY + oy, FOV);
-  /* 바닥과 복도는 타일로 쪼갠다. 큰 판 하나면 깊이 정렬이 깨져 다른 물체를 덮어버림 */
-  for (let gx = 0; gx < 8; gx++) for (let gz = 0; gz < 9; gz++) {
-    const x = MAPC.x - 300 + 37.5 + gx * 75, z = MAPC.z - 350 + 39 + gz * 78;
-    pushBox(x, -18, z, 75, 20, 78, ((gx + gz) & 1) ? '#140e1f' : '#171024');
+
+  /* 바닥 — 큰 판 하나면 깊이 정렬이 깨지므로 타일로 쪼갠다 */
+  for (let gx = 0; gx < 6; gx++) for (let gz = 0; gz < 10; gz++) {
+    pushBox(10 + 60 * gx + 30, -20, Z_START - 60 + 80 * gz + 40, 60, 20, 80, ((gx + gz) & 1) ? '#140e1f' : '#171024');
   }
-  for (let i = 0; i < PATH.length - 1; i++) {
-    const a = PATH[i], b = PATH[i+1];
-    const len = Math.hypot(b[0]-a[0], b[1]-a[1]), n = Math.max(1, Math.ceil(len / 56));
-    for (let j = 0; j < n; j++) {
-      const t0 = j / n, t1 = (j + 1) / n;
-      const x0 = a[0] + (b[0]-a[0]) * t0, z0 = a[1] + (b[1]-a[1]) * t0;
-      const x1 = a[0] + (b[0]-a[0]) * t1, z1 = a[1] + (b[1]-a[1]) * t1;
-      const mx = (x0+x1)/2, mz = (z0+z1)/2;
-      const lx = Math.abs(x1-x0), lz = Math.abs(z1-z0);
-      pushBox(mx, -6, mz, lx+CW+14, 10, lz+CW+14, '#1d1730');
-      pushBox(mx, 0, mz, lx+CW, 8, lz+CW, ((i + j) & 1) ? '#342a4e' : '#2e2545');
+  /* 구역 바닥: 3줄 × 4단으로 깔아서 줄이 눈에 보이게 */
+  for (const Z of ZONES) {
+    const cw = ZONE_W / 3, rh = (Z.z1 - Z.z0) / 4;
+    for (let c = 0; c < 3; c++) for (let r = 0; r < 4; r++) {
+      pushBox(ZONE_X0 + cw * c + cw / 2, -4, Z.z0 + rh * r + rh / 2, cw - 2, 10, rh - 2,
+              ((c + r) & 1) ? '#3a3054' : '#332a4a');
+    }
+    /* 구역 모서리 기둥과 횃불 */
+    for (const px of [ZONE_X0 - 14, ZONE_X1 + 14]) for (const pz of [Z.z0 - 8, Z.z1 + 8]) {
+      pushBox(px, 18, pz, 18, 44, 18, '#241d38');
+      const g = 0.6 + Math.sin(T * 4 + px + pz) * 0.3;
+      pushBox(px, 46, pz, 10, 11, 10, dk('#ff8a3a', 0.7 + g * 0.5));
     }
   }
-  for (const p of PILLARS) {
-    pushBox(p[0], 18, p[1], 16, 40, 16, '#241d38');
-    pushBox(p[0], 40, p[1], 22, 6, 22, '#2e2544');
-    const g = 0.6 + Math.sin(T * 4 + p[0]) * 0.3;
-    pushBox(p[0], 48, p[1], 9, 10, 9, dk('#ff8a3a', 0.7 + g * 0.5));
+  /* 구역 사이 연결 통로 */
+  const links = [[Z_START, ZONES[0].z0], [ZONES[0].z1, ZONES[1].z0], [ZONES[1].z1, ZONES[2].z0], [ZONES[2].z1, Z_END]];
+  for (const [a2, b2] of links) {
+    const n = Math.max(1, Math.round((b2 - a2) / 30));
+    for (let i = 0; i < n; i++) {
+      const h = (b2 - a2) / n;
+      pushBox(180, -4, a2 + h * i + h / 2, 86, 10, h - 2, (i & 1) ? '#2e2545' : '#2a2140');
+    }
   }
-  pushBox(PATH[0][0] - 6, 24, PATH[0][1] - 28, 14, 48, 14, '#5a4330');
-  pushBox(PATH[0][0] - 6, 24, PATH[0][1] + 28, 14, 48, 14, '#5a4330');
-  pushBox(PATH[0][0] - 6, 52, PATH[0][1], 14, 10, 70, '#6b5038');
+  /* 입구 */
+  pushBox(140, 24, Z_START, 14, 48, 14, '#5a4330');
+  pushBox(220, 24, Z_START, 14, 48, 14, '#5a4330');
+  pushBox(180, 52, Z_START, 94, 10, 14, '#6b5038');
+
+  /* 배치 칸 */
   for (let i = 0; i < NROOM; i++) {
     const r = ROOMS[i], b = G.rooms[i];
-    const col = i === G.sel ? '#7a6630' : (G.moveFrom >= 0 && !b) ? '#2f5f3f' : b ? '#2a2440' : '#453a62';
-    pushBox(r.x, 5, r.z, 46, 8, 46, col);
+    const col = i === G.sel ? '#7a6630' : (G.moveFrom >= 0 && !b) ? '#2f5f3f' : b ? '#2a2440' : '#473c66';
+    pushBox(r.x, 3, r.z, 36, 7, 36, col);
   }
+
   pushBox(STONE.x, 2, STONE.z, 76, 12, 76, '#2a2242');
-  const si = unitImg('__stone');
+  const si = cam.pitch > 1.25 ? null : unitImg('__stone');
   if (!si) drawModel(CRYSTAL(), STONE.x, 8, STONE.z, 46, 0);
-  const bbQ = [];
+  const bbQ = [], simple = cam.pitch > 1.25, icoQ = [], plQ = [];
   for (let i = 0; i < NROOM; i++) {
     const b = G.rooms[i]; if (!b) continue;
     if (b.def.kind === 'minion') {
       const fly = b.def.fly ? 14 + Math.sin(T * 3 + i) * 4 : 0;
       const P = pose(b, 9 + fly);
       const bx = b.x + Math.sin(b.yaw) * P.push + P.shk + P.kx, bz = b.z + Math.cos(b.yaw) * P.push + P.kz;
-      const im = unitImg(b.key);
-      if (im) bbQ.push([im, bx, P.y, bz, b.def.sc * 1.55, P.o, 2]);
-      else drawModel(modelOf(b.key, b.def.art), bx, P.y, bz, b.def.sc, b.yaw);
-    } else {
+      if (simple) { icoQ.push([b.def.ico, b.x, b.z, RAR_COL[b.def.rar], b.hp / b.maxHp]); }
+      else {
+        const im = unitImg(b.key);
+        plQ.push([b.def.ico, bx, P.y, bz, RAR_COL[b.def.rar], b.hp / b.maxHp, b.def.sc * 1.55, 0]);
+        if (im) bbQ.push([im, bx, P.y, bz, b.def.sc * 1.55, P.o, 2]);
+        else drawModel(modelOf(b.key, b.def.art), bx, P.y, bz, b.def.sc, b.yaw);
+      }
+    } else if (simple) { icoQ.push([b.def.ico, b.x, b.z, RAR_COL[b.def.rar], -1]); }
+    else {
       const im = unitImg(b.key);
       if (im) bbQ.push([im, b.x, 9, b.z, b.def.sc * 0.9, NOOPT, 2]);
       else drawModel(TRAPM[b.key](), b.x, 9, b.z, b.def.sc, 0);
+      plQ.push([b.def.ico, b.x, 9, b.z, RAR_COL[b.def.rar], -1, b.def.sc * 0.9, 2]);
     }
   }
   for (const h of G.heroes) {
@@ -1476,8 +1586,12 @@ function drawScene() {
     const hx = h.x + Math.sin(h.yaw) * P.push + P.shk + P.kx, hz = h.z + Math.cos(h.yaw) * P.push + P.kz;
     const im = unitImg(h.type);
     const hsz = h.def.sc * (h.scl || 1);
-    if (im) bbQ.push([im, hx, P.y, hz, hsz * 1.55, P.o, 2]);
-    else drawModel(modelOf(h.type, h.def.art), hx, P.y, hz, hsz, h.yaw);
+    if (simple) icoQ.push([h.def.ico, h.x, h.z, h.A ? h.A.col : TIER_COL[h.def.tier], h.hp / h.maxHp, 1]);
+    else {
+      if (im) bbQ.push([im, hx, P.y, hz, hsz * 1.55, P.o, 2]);
+      else drawModel(modelOf(h.type, h.def.art), hx, P.y, hz, hsz, h.yaw);
+      plQ.push([h.def.ico, hx, P.y, hz, h.A ? h.A.col : TIER_COL[h.def.tier], h.hp / h.maxHp, hsz * 1.55, 1]);
+    }
   }
   /* 쓰러진 유닛: 옆으로 넘어지며 사라진다 */
   for (const c of G.corpses) {
@@ -1496,6 +1610,17 @@ function drawScene() {
   if (si) pushBillboard(si, STONE.x, 10 + Math.sin(T * 1.6) * 2, STONE.z, 56, { sy:1 + Math.sin(T * 1.6) * 0.02 }, 2);
   for (const q of bbQ) pushBillboard(q[0], q[1], q[2], q[3], q[4], q[5], q[6]);
   drawBillboards();
+  /* 위에서 내려다보는 배치 시점에서는 일러스트 대신 알아보기 쉬운 아이콘 */
+  for (const q of icoQ) {
+    const s2 = proj(q[1], 14, q[2]); if (!s2) continue;
+    const r = 15 * (540 / s2[2]) * 1.3;
+    ctx.fillStyle = 'rgba(14,10,22,.85)'; ctx.beginPath(); ctx.arc(s2[0], s2[1], r, 0, 7); ctx.fill();
+    ctx.strokeStyle = q[3]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(s2[0], s2[1], r, 0, 7); ctx.stroke();
+    ctx.font = (r * 1.25) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(q[0], s2[0], s2[1] + r * 0.06);
+    if (q[4] >= 0) bar2(s2[0] - r, s2[1] + r + 2, r * 2, 3.5, q[4], q[5] ? '#e8574c' : '#6bdc7a');
+  }
+  drawPlates(plQ);
 
   /* --- 3D 위에 겹치는 2D 표시 --- */
   if (G.sel >= 0) {
@@ -1598,9 +1723,14 @@ function drawGame() {
   /* 시점 버튼 */
   btn(W - 74, 68, 62, 22, SAVE.mute ? '소리 꺼짐' : '소리 켜짐',
       () => { SAVE.mute = !SAVE.mute; persist(); }, { bg:'rgba(40,32,60,.85)', fs:10, fc:SAVE.mute ? '#8a7aa5' : '#8be9ff' });
-  if (camManual) {
-    btn(W - 86, 94, 74, 26, '시점 되돌리기', () => camTo(G.phase === 'run' ? 'battle' : 'prep', 0.6), { bg:'rgba(70,50,30,.9)', fs:10, on:true });
-  } else txt(G.phase === 'run' ? '전투 시점' : '배치 시점 (위에서)', W - 12, 100, 10, '#6b5a85', 'right');
+  /* 구역 바로가기 */
+  ZONES.forEach((Z, i) => {
+    btn(10 + i * 46, 68, 42, 22, Z.no + '구역', () => camToZone(i),
+        { bg:camMode === 'zone' + i ? 'rgba(90,60,40,.9)' : 'rgba(40,32,60,.85)', fs:10, on:camMode === 'zone' + i });
+  });
+  btn(148, 68, 46, 22, '전체', () => camTo(G.phase === 'run' ? 'battle' : 'prep', 0.6),
+      { bg:'rgba(40,32,60,.85)', fs:10 });
+  txt(G.phase === 'run' ? '드래그로 시점 이동' : '배치 시점 (위에서)', W - 12, 98, 9, '#6b5a85', 'right');
 
   /* 하단 패널 */
   ctx.fillStyle = '#0c0812'; ctx.fillRect(0, PANEL_Y, W, H - PANEL_Y);
