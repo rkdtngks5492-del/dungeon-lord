@@ -9,6 +9,7 @@ import android.os.Vibrator;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
@@ -60,6 +61,8 @@ public class MainActivity extends AppCompatActivity {
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         web.setBackgroundColor(0xFF0B0712);
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        /* 덱 이름 바꾸기(prompt) 같은 JS 입력창을 띄우려면 필요하다 */
+        web.setWebChromeClient(new WebChromeClient());
         web.addJavascriptInterface(new AdBridge(), "AndroidAds");
         web.addJavascriptInterface(new AppBridge(), "AndroidApp");
         /* TODO: 결제 연동을 마치면 아래 줄의 주석을 푼다. 그 전에는 게임이 "Play 스토어 등록 후 열려요"라고 안내한다 */

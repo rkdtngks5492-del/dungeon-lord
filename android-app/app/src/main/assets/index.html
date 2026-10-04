@@ -888,6 +888,8 @@ function defaultSave() {
            dq:null, att:{ n:0, day:'' }, boxT:0, mailGot:{}, clr:{ s:{}, m:{} },
            /* 튜토리얼: s = 진행 단계(숫자) 또는 'done', seen = 기능 안내를 본 것, got = 무료 소환권 지급 여부 */
            tut:{ s:0, seen:{}, got:false }, tickets:0,
+           /* 덱 1·2·3: mteam/tteam은 지금 고른 덱의 배열을 그대로 가리킨다 (linkDeck) */
+           decks:[], deckI:0, lsort:'rar', lfilt:'all',
            /* v4: 권속 성급·레벨·카드, 광고 제거, 일일 상자 */
            star:{}, lv:{}, cards:{}, noAds:false, dbDay:'', dbAdDay:'', v4:true };
 }
@@ -918,9 +920,17 @@ function migrate(s) {
   return s;
 }
 function loadSave() {
-  try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.own && s.mteam) return migrate(s); } catch (e) {}
-  return defaultSave();
+  try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.own && s.mteam) return linkDeck(migrate(s)); } catch (e) {}
+  return linkDeck(defaultSave());
 }
+/* 덱 3개를 만들고(없으면 지금 편성이 덱 1), 고른 덱의 배열을 mteam/tteam으로 쓴다. 저장했다 읽으면 연결이 끊기므로 읽을 때마다 다시 잇는다 */
+function linkDeck(s) {
+  if (!Array.isArray(s.decks) || s.decks.length !== 3) s.decks = [{ n:'덱 1', m:s.mteam.slice(), t:s.tteam.slice() }, { n:'덱 2', m:[], t:[] }, { n:'덱 3', m:[], t:[] }];
+  s.deckI = Math.max(0, Math.min(2, s.deckI | 0));
+  const d = s.decks[s.deckI]; s.mteam = d.m; s.tteam = d.t;
+  return s;
+}
+function selectDeck(i) { SAVE.deckI = i; linkDeck(SAVE); persist(); }
 let SAVE = loadSave();
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); } catch (e) {} }
 
@@ -977,6 +987,13 @@ function statMul(k) {
 const MS_LV = [MILESTONE.act, MILESTONE.p1, MILESTONE.up1, MILESTONE.p2, MILESTONE.up2];
 function starOf(k) { return Math.max(1, Math.min(STAR.max, SAVE.star[k] || 1)); }
 function lvCap(k) { return STAR.cap[starOf(k) - 1]; }
+/* ===== 던전 심도: 계정 단위 레벨 제한 =====
+   권속은 심도보다 높이 올릴 수 없다(별마다의 최대 레벨도 그대로). 관문을 돌파할 때마다 1씩, 장(5관문)을 넘길 때 크게 오른다.
+   이미 심도보다 높은 권속은 그대로 두고 그 이상으로만 못 올린다. DEPTH[돌파한 관문 수] */
+const DEPTH = [4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22, 26];
+function depthNow(c) { c = c === undefined ? SAVE.cleared : c; return DEPTH[Math.max(0, Math.min(DEPTH.length - 1, c))]; }
+/* 지금 올릴 수 있는 최대 레벨 = 별 상한과 심도 중 낮은 쪽 */
+function lvLimit(k) { return Math.min(lvCap(k), depthNow()); }
 function lvOf(k) { return Math.max(1, Math.min(lvCap(k), SAVE.lv[k] || 1)); }
 function cardsOf(k) { return SAVE.cards[k] || 0; }
 function promoNeed(k) { return starOf(k) < STAR.max ? STAR.need[starOf(k) - 1] : 0; }
@@ -988,6 +1005,7 @@ function levelUp(k) {
   if (!SAVE.own[k]) return;
   const lv = lvOf(k);
   if (lv >= lvCap(k)) { toast(starOf(k) < STAR.max ? '최대 레벨이에요. 승급하면 더 올릴 수 있어요' : '최대 레벨이에요'); return; }
+  if (lv >= depthNow()) { toast('던전 심도 ' + (lv + 1) + ' 필요 · 관문을 돌파하면 올라요'); tipOnce('depth'); return; }
   const c = lvCost(lv); if (SAVE.gems < c) { toast(CUR.gem.name + '이 부족해요'); return; }
   SAVE.gems -= c; SAVE.lv[k] = lv + 1; persist(); SFX.reveal('R');
   if (lv + 1 >= lvCap(k)) tipOnce('levels');   /* 처음 레벨 상한에 닿으면 승급 안내 */
@@ -1169,12 +1187,12 @@ function openDailyBox(ad) {
   if (ad) ADS.rewarded('일일 상자', ok => { if (ok) go(); }); else go();
 }
 function toggleTeam(key) {
-  if (!SAVE.own[key]) { L.msg = '아직 얻지 못한 카드예요'; return; }
+  if (!SAVE.own[key]) { toast('아직 얻지 못한 카드예요'); return; }
   const isM = DEF[key].kind === 'minion';
   const team = isM ? SAVE.mteam : SAVE.tteam, cap = isM ? mSlots() : tSlots();
   const i = team.indexOf(key);
   if (i >= 0) team.splice(i, 1);
-  else if (team.length >= cap) { L.msg = (isM ? '권속' : '함정') + ' 슬롯이 ' + cap + '칸으로 꽉 찼어요'; return; }
+  else if (team.length >= cap) { toast((isM ? '권속' : '함정') + ' 칸이 ' + cap + '칸으로 꽉 찼어요 · 먼저 하나를 빼세요'); return; }
   else team.push(key);
   questAdd('deck');
   persist();
@@ -2255,12 +2273,6 @@ const ADS = (() => {
       if (n) { ADV.cb = cb; ADV.on = false; ADV.wait = true; try { n.showRewarded(); } catch (e) { ADV.cb = null; ADV.wait = false; cb(false); } return; }
       ADV.on = true; ADV.t = 0; ADV.dur = 5; ADV.label = label; ADV.cb = cb; ADV.done = false; ADV.kind = 'reward';
     },
-    interstitial() {
-      if (SAVE.noAds || tutOn()) return;
-      const n = nat();
-      if (n && typeof n.showInterstitial === 'function') { try { n.showInterstitial(); } catch (e) {} return; }
-      ADV.on = true; ADV.t = 0; ADV.dur = 3; ADV.label = '전면 광고'; ADV.cb = null; ADV.done = false; ADV.kind = 'inter';
-    },
   };
 })();
 function todayKey() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
@@ -2558,101 +2570,259 @@ function drawMenu() {
   drawTopBar(); drawNav(); drawPullResult(); drawModal(); drawToast();
 }
 
-/* ================= 덱 (편성 · 소환 · 강화) ================= */
+/* ================= 덱 (덱 1·2·3 · 편성 슬롯 · 보유 목록) =================
+   위에서부터: 덱 탭(누른 덱을 한 번 더 누르면 이름 변경) → 던전 심도 → 지금 편성(권속·함정 칸) → 보유 목록(정렬·등급 필터).
+   카드를 누르면 상세 창이 열리고, 거기서 레벨업·승급·초기화·편성을 한다. 소환은 상점 「소환」 탭. */
+const SORTS = { rar:'등급순', lv:'레벨순', own:'보유순' };
+const FILTS = ['all', 'N', 'R', 'SR', 'SSR'];
+function ownedList(isM) {
+  const pool = isM ? MINIONS : TRAPSL, ord = Object.keys(SAVE.own), f = SAVE.lfilt || 'all';
+  const lvK = k => isM ? lvOf(k) * 10 + starOf(k) : (SAVE.own[k] || 0) * 20 + enhLv(k);
+  const key = { rar:k => RAR_RANK[DEF[k].rar] * 1000 + lvK(k), lv:k => lvK(k) * 10 + RAR_RANK[DEF[k].rar], own:k => -ord.indexOf(k) }[SAVE.lsort] || (k => RAR_RANK[DEF[k].rar]);
+  /* 미보유는 언제나 맨 뒤 */
+  return pool.filter(k => f === 'all' || DEF[k].rar === f).sort((a, b) => (SAVE.own[b] ? 1 : 0) - (SAVE.own[a] ? 1 : 0) || key(b) - key(a));
+}
+function unitTile(k, x, y, w, h, inT) {
+  const d = DEF[k], own = !!SAVE.own[k], col = RAR_COL[d.rar], isM = d.kind === 'minion';
+  ctx.fillStyle = own ? '#271f38' : '#1a1524'; rbox(x, y, w, h, 7); ctx.fill();
+  ctx.strokeStyle = inT ? '#ffd35a' : col; ctx.lineWidth = inT ? 2.2 : 1.2; rbox(x, y, w, h, 7); ctx.stroke();
+  ctx.globalAlpha = own ? 1 : 0.18;
+  const im = unitImg(k);
+  if (im) fitImg(ctx, im, x + w / 2, y + h - (h > 50 ? 15 : 4), w - 6, h - (h > 50 ? 26 : 14)); else ctx.drawImage(thumb(k), x + w / 2 - 15, y + 8, 30, 30);
+  ctx.globalAlpha = 1;
+  if (h <= 50) { if (own && isM) txt('Lv' + lvOf(k), x + w / 2, y + 7, 7, '#c9b8ff', 'center'); return; }
+  if (!own) { txt('미보유', x + w / 2, y + h - 7, 8, '#6b5a85', 'center'); return; }
+  txt(d.name.length > 6 ? d.name.slice(0, 6) : d.name, x + w / 2, y + h - 7, 8, '#fff', 'center');
+  txt(isM ? 'Lv' + lvOf(k) : 'Lv' + SAVE.own[k] + (enhLv(k) > 1 ? '+' + enhLv(k) : ''), x + 4, y + 9, 8, '#c9b8ff');
+  if (isM) txt('★' + starOf(k), x + w - 4, y + 9, 8, '#ffd35a', 'right');
+  if (inT) { ctx.fillStyle = '#ffd35a'; rbox(x + w - 15, y + 14, 12, 11, 4); ctx.fill(); txt('✓', x + w - 9, y + 19.5, 8, '#141018', 'center'); }
+  if (isM && canPromote(k)) txt('▲', x + 8, y + 22, 9, '#4ee06a', 'center');   /* 승급 가능 */
+}
+function openDetail(k) {
+  if (!SAVE.own[k]) { toast('아직 얻지 못했어요 · 상점 「소환」에서 얻을 수 있어요'); return; }
+  M = { k:DEF[k].kind === 'minion' ? 'unit' : 'trap', key:k };
+}
+function renameDeck(i) {
+  const d = SAVE.decks[i]; let n = null;
+  try { n = typeof prompt === 'function' ? prompt('덱 이름 (최대 8자)', d.n) : null; } catch (e) {}
+  if (n === null || n === undefined) return;
+  n = String(n).trim().slice(0, 8); if (n) { d.n = n; persist(); }
+}
 function drawLobby() {
   BTN = [];
   menuBg();
   menuTitle('덱 편성');
-
-  const isM = L.tab === 'minion';
-  btn(12, 56, 164, 28, '권속  ' + SAVE.mteam.length + '/' + mSlots(), () => { L.tab = 'minion'; L.info = null; }, { on:isM, bg:isM ? '#4a3a63' : '#1e1829', fs:12 });
-  btn(184, 56, 164, 28, '함정  ' + SAVE.tteam.length + '/' + tSlots(), () => { L.tab = 'trap'; L.info = null; }, { on:!isM, bg:!isM ? '#4a3a63' : '#1e1829', fs:12 });
-
-  /* 카드 5열 */
-  const pool = isM ? MINIONS : TRAPSL, team = isM ? SAVE.mteam : SAVE.tteam;
-  const cw = 64, chh = 72, cg = 4, cx0 = (W - (cw * 5 + cg * 4)) / 2, cy0 = 90;
-  pool.forEach((k, i) => {
-    const d = DEF[k], x = cx0 + (i % 5) * (cw + cg), y = cy0 + Math.floor(i / 5) * (chh + cg);
-    const own = !!SAVE.own[k], inT = team.indexOf(k) >= 0, col = RAR_COL[d.rar], sel = L.info === k;
-    /* 처음 누르면 고르기(레벨업·승급 대상), 고른 카드를 한 번 더 누르면 편성/해제 */
-    BTN.push({ x, y, w:cw, h:chh, act:() => {
-      if (own && !sel) { L.info = k; toast(inT ? '한 번 더 누르면 편성에서 빠져요' : '한 번 더 누르면 편성돼요'); }
-      else { L.info = k; toggleTeam(k); }
-    }, label:'카드:' + k });
-    ctx.fillStyle = own ? (sel ? '#352a4c' : '#271f38') : '#1a1524'; rbox(x, y, cw, chh, 7); ctx.fill();
-    ctx.strokeStyle = inT ? '#ffd35a' : sel ? '#ffffff' : col; ctx.lineWidth = inT || sel ? 2.5 : 1.3; rbox(x, y, cw, chh, 7); ctx.stroke();
-    ctx.fillStyle = col; rbox(x + 3, y + 3, 26, 11, 5); ctx.fill();
-    txt(RAR_NAME[d.rar], x + 16, y + 9, 7, '#141018', 'center');
-    if (inT) txt('편성', x + cw - 4, y + 9, 8, '#ffd35a', 'right');
-    ctx.globalAlpha = own ? 1 : 0.15;
-    const ci = unitImg(k);
-    if (ci) fitImg(ctx, ci, x + cw / 2, y + 50, cw - 10, 34);
-    else ctx.drawImage(thumb(k), x + cw / 2 - 19, y + 13, 38, 38);
-    ctx.globalAlpha = 1;
-    if (!own) { txt('미보유', x + cw / 2, y + 60, 9, '#6b5a85', 'center'); return; }
-    txt(d.name.length > 6 ? d.name.slice(0, 6) : d.name, x + cw / 2, y + 56, 8, '#fff', 'center');
-    if (isM) {
-      txt('★'.repeat(starOf(k)), x + cw / 2, y + 66, 8, '#ffd35a', 'center');
-      txt('Lv' + lvOf(k), x + 4, y + 22, 8, '#c9b8ff');
-      if (canPromote(k)) { /* 승급 가능: 초록 화살표 */
-        const ax = x + cw - 10, ay = y + 24 + Math.sin(T * 5) * 1.5;
-        ctx.fillStyle = '#4ee06a'; ctx.beginPath(); ctx.moveTo(ax, ay - 7); ctx.lineTo(ax + 6, ay); ctx.lineTo(ax + 2.5, ay); ctx.lineTo(ax + 2.5, ay + 6);
-        ctx.lineTo(ax - 2.5, ay + 6); ctx.lineTo(ax - 2.5, ay); ctx.lineTo(ax - 6, ay); ctx.closePath(); ctx.fill();
-      }
-    } else {
-      const e = enhLv(k);
-      txt('Lv.' + SAVE.own[k] + (e > 1 ? ' +' + e : ''), x + cw / 2, y + 66, 8, e > 1 ? CUR.gem.col : '#c9b8ff', 'center');
-    }
+  /* 덱 1·2·3 */
+  SAVE.decks.forEach((d, i) => {
+    const on = SAVE.deckI === i;
+    btn(12 + i * 100, 58, 96, 26, d.n, () => { if (on) renameDeck(i); else selectDeck(i); }, { on, bg:on ? '#4a3a63' : '#1e1829', fs:11, fc:on ? '#ffd35a' : '#c9b8ff' });
   });
-
-  const iy = cy0 + 4 * (chh + cg) + 2;
-  const k = L.info && SAVE.own[L.info] ? L.info : null;
-  ctx.fillStyle = '#1a1524'; rbox(12, iy, W - 24, 46, 6); ctx.fill();
-  if (k) {
-    const d = DEF[k], m = statMul(k);
-    if (isM) BTN.push({ x:12, y:iy, w:W - 24, h:46, act:() => { M = { k:'unit', key:k }; }, label:'권속 정보' });
-    txt(d.name + (isM ? '  ★' + starOf(k) + '  Lv.' + lvOf(k) + '/' + lvCap(k) : '') + ' — ' + d.note, 20, iy + 10, 9, '#ffe9a8');
-    txt(d.kind === 'minion'
-      ? '체력 ' + Math.round(d.hp * m.hp) + ' · 공격 ' + Math.round(d.dmg * m.dmg) + ' · 사거리 ' + d.rng + ' · ' + d.cd + '초'
-      : '피해 ' + Math.round(d.dmg * m.dmg) + ' · 범위 ' + d.rng + (d.stun ? ' · 기절 ' + d.stun + '초' : '') + (d.slow ? ' · 둔화' : '') + (d.push ? ' · 밀어내기' : ''),
-      20, iy + 23, 9, '#9aa0a6');
-    if (isM && USKILL[k]) {
-      const lv = lvOf(k), A = USKILL[k].act;
-      txt(lv >= MILESTONE.act ? '스킬 「' + A.name + '」 · 눌러서 자세히 ›' : '스킬 「' + A.name + '」 Lv' + MILESTONE.act + ' 개방 · 눌러서 자세히 ›', 20, iy + 36, 9, lv >= MILESTONE.act ? '#9ae8b5' : '#8a7aa5');
-    } else if (!isM) txt('중복 카드는 레벨 업 (최대 ' + MAX_LV + '), 그 뒤로는 ◆ 환급', 20, iy + 36, 9, '#8a7aa5');
-  } else txt(L.msg, W / 2, iy + 23, 11, '#ffe9a8', 'center');
-
-  const sy = iy + 50;
-  const ni = nextSlotInfo(isM ? 'minion' : 'trap'), cap = isM ? mSlots() : tSlots();
-  btn(12, sy, W - 24, 20, (isM ? '권속' : '함정') + ' 칸 ' + cap + (ni ? '  →  ' + ni.n + '칸 (' + ni.at + '관문 돌파 시)' : '  (최대)'), () => {}, { dis:true, fs:10 });
-
-  const gy = sy + 24, cat = L.tab, p = PULL_COST[cat], nm = isM ? '권속' : '함정';
-  const tix = isM && SAVE.tickets > 0;
-  btn(12, gy, 165, 36, nm + ' 소환 ×1', () => doPull(cat, 1), { dis:SAVE.soul < p.one && !tix, bg:'#33204a', fs:12, sub:tix ? '🎟 무료 소환권 ' + SAVE.tickets + '장' : CUR.soul.ico + ' ' + p.one, sc:CUR.soul.col });
-  btn(183, gy, 165, 36, nm + ' 소환 ×10', () => doPull(cat, 10), { dis:SAVE.soul < p.ten, bg:'#392b59', fs:12, sub:CUR.soul.ico + ' ' + p.ten + ' · 희귀 이상 보장', sc:CUR.soul.col });
-
-  const fy = gy + 40, pl = adPullLeft();
-  btn(12, fy, W - 24, 28, '🎬 광고 보고 ' + nm + ' 무료 소환 ×1  ·  ' + (pl > 0 ? '오늘 ' + pl + '회 남음' : '내일 다시 열려요'), () => adPull(cat), { dis:pl <= 0, bg:'#2b3f5a', fs:11 });
-
-  /* 성장: 권속은 레벨업(◆) + 승급(카드), 함정은 강화(◆) */
-  const ty = fy + 32;
-  if (k && isM) {
-    const lv = lvOf(k), atCap = lv >= lvCap(k), c = lvCost(lv), st = starOf(k), need = promoNeed(k);
-    btn(12, ty, 165, 40, atCap ? 'Lv.' + lv + ' (최대)' : '레벨업 Lv.' + lv + ' → ' + (lv + 1), () => levelUp(k), {
-      dis:atCap || SAVE.gems < c, bg:'#1f3a4a', bc:CUR.gem.col, fs:12,
-      sub:atCap ? (st < STAR.max ? '승급하면 최대 Lv.' + STAR.cap[st] : '최고 레벨') : CUR.gem.ico + ' ' + c, sc:CUR.gem.col });
-    btn(183, ty, 165, 40, st >= STAR.max ? '★' + st + ' (최고)' : '승급 ★' + st + ' → ★' + (st + 1), () => promote(k), {
-      dis:!canPromote(k), bg:canPromote(k) ? '#244a2c' : '#1e1829', bc:canPromote(k) ? '#4ee06a' : '#3a2f4d', fs:12,
-      sub:st >= STAR.max ? '카드 ' + cardsOf(k) + '장' : '같은 카드 ' + cardsOf(k) + '/' + need + '장 · 능력치 +' + Math.round(STAR.bonus * 100) + '%', sc:canPromote(k) ? '#9ae8b5' : '#8a7aa5' });
-  } else if (k) {
-    const e = enhLv(k), c = enhCost(e), mx = e >= ENH.max;
-    btn(12, ty, W - 24, 40, DEF[k].name + ' 강화 +' + e + (mx ? ' (최대)' : '  →  +' + (e + 1)), () => enhance(k), {
-      dis:mx || SAVE.gems < c, bg:'#1f3a4a', fs:13, bc:CUR.gem.col,
-      sub:mx ? '피해 +' + Math.round(ENH.per * 100 * (e - 1)) + '%' : CUR.gem.ico + ' ' + c + '   ·   피해 +' + Math.round(ENH.per * 100) + '%', sc:CUR.gem.col });
-  } else btn(12, ty, W - 24, 40, '카드를 골라 ' + CUR.gem.ico + '로 키우세요', () => {}, { dis:true, fs:12,
-      sub:isM ? '레벨업은 ◆, 승급은 같은 권속 카드 · 승급 가능하면 초록 화살표' : '단계마다 피해 +' + Math.round(ENH.per * 100) + '% (최대 +' + ENH.max + ')' });
-  txt('일반 65% · 희귀 27% · 영웅 7% · 전설 1%' + (isM ? '   /   중복은 승급 카드' : '   /   중복은 레벨 업'), W / 2, ty + 50, 9, '#8a7aa5', 'center');
+  btn(314, 58, 34, 26, '✏', () => renameDeck(SAVE.deckI), { bg:'#241d2e', fs:12 });
+  /* 던전 심도 */
+  const dp = depthNow(), nx = SAVE.cleared < STAGES.length ? depthNow(SAVE.cleared + 1) : 0;
+  btn(12, 90, W - 24, 22, '⛏ 던전 심도 ' + dp + '  ·  권속 최대 Lv.' + dp + (nx > dp ? '   (다음 관문 돌파 → ' + nx + ')' : ''), () => { M = { k:'depth' }; },
+      { bg:'#2a2140', bc:'#8a6ad8', fs:10, fc:'#e4d4ff' });
+  /* 지금 편성: 권속 칸 / 함정 칸 (잠긴 칸은 자물쇠) */
+  const slotRow = (y, team, cap, max, nm) => {
+    txt(nm + ' ' + team.length + '/' + cap, 14, y - 7, 10, '#c9b8ff');
+    const ni = nextSlotInfo(nm === '권속' ? 'minion' : 'trap');
+    if (ni) txt(ni.at + '관문 돌파 시 ' + ni.n + '칸', W - 14, y - 7, 9, '#8a7aa5', 'right');
+    const sw = 31, sg = 2.5;
+    for (let i = 0; i < max; i++) {
+      const x = 12 + i * (sw + sg), k = team[i];
+      if (k) { BTN.push({ x, y, w:sw, h:40, act:() => openDetail(k), label:'편성칸:' + k }); unitTile(k, x, y, sw, 40, false); continue; }
+      ctx.fillStyle = i < cap ? '#1e1829' : '#141018'; rbox(x, y, sw, 40, 6); ctx.fill();
+      ctx.strokeStyle = '#3a2f4d'; ctx.lineWidth = 1; rbox(x, y, sw, 40, 6); ctx.stroke();
+      txt(i < cap ? '+' : '🔒', x + sw / 2, y + 20, i < cap ? 14 : 9, '#4a3f63', 'center');
+    }
+  };
+  slotRow(134, SAVE.mteam, mSlots(), MSLOT_MAX, '권속');
+  slotRow(194, SAVE.tteam, tSlots(), TSLOT_MAX, '함정');
+  /* 보유 목록: 권속/함정 · 정렬 · 등급 필터 */
+  const isM = L.tab !== 'trap';
+  btn(12, 244, 70, 24, '권속', () => { L.tab = 'minion'; }, { on:isM, bg:isM ? '#4a3a63' : '#1e1829', fs:11 });
+  btn(86, 244, 70, 24, '함정', () => { L.tab = 'trap'; }, { on:!isM, bg:!isM ? '#4a3a63' : '#1e1829', fs:11 });
+  const sk = Object.keys(SORTS), fi = FILTS.indexOf(SAVE.lfilt || 'all');
+  btn(160, 244, 92, 24, '정렬: ' + (SORTS[SAVE.lsort] || '등급순'), () => { SAVE.lsort = sk[(sk.indexOf(SAVE.lsort) + 1) % sk.length]; persist(); }, { bg:'#241d2e', fs:10 });
+  btn(256, 244, 92, 24, '등급: ' + (fi <= 0 ? '전체' : RAR_NAME[FILTS[fi]]), () => { SAVE.lfilt = FILTS[(Math.max(0, fi) + 1) % FILTS.length]; persist(); },
+      { bg:'#241d2e', fs:10, fc:fi <= 0 ? '#fff' : RAR_COL[FILTS[fi]] });
+  const list = ownedList(isM), team = isM ? SAVE.mteam : SAVE.tteam;
+  const cw = 64, chh = 70, cg = 4, cx0 = (W - (cw * 5 + cg * 4)) / 2, cy0 = 276;
+  list.forEach((k, i) => {
+    const x = cx0 + (i % 5) * (cw + cg), y = cy0 + Math.floor(i / 5) * (chh + cg);
+    BTN.push({ x, y, w:cw, h:chh, act:() => openDetail(k), label:'카드:' + k });
+    unitTile(k, x, y, cw, chh, team.indexOf(k) >= 0);
+  });
+  if (!list.length) txt('이 등급의 ' + (isM ? '권속' : '함정') + '이 없어요', W / 2, 330, 11, '#6b5a85', 'center');
+  txt('카드를 누르면 상세 창 · 레벨업 ' + CUR.gem.ico + ' · 승급은 같은 카드', W / 2, 630, 9, '#8a7aa5', 'center');
 }
+
+/* ================= 권속 · 함정 상세 창 ================= */
+const RESET_REFUND = 0.5;   /* 초기화하면 쓴 수정의 이만큼을 돌려준다 */
+function lvSpent(lv) { let g = 0; for (let l = 1; l < lv; l++) g += lvCost(l); return g; }
+function enhSpent(e) { let g = 0; for (let l = 1; l < e; l++) g += enhCost(l); return g; }
+function tierAt(lv) { return lv < MILESTONE.act ? 0 : lv >= MILESTONE.up2 ? 3 : lv >= MILESTONE.up1 ? 2 : 1; }
+/* 위쪽 공통: 큰 그림 + 이름·등급·설명 */
+function detailHead(k, sub) {
+  const d = DEF[k];
+  panel(12, 52, W - 24, 590, d.name);
+  ctx.fillStyle = '#120d1c'; rbox(24, 84, 128, 128, 10); ctx.fill();
+  ctx.strokeStyle = RAR_COL[d.rar]; ctx.lineWidth = 2; rbox(24, 84, 128, 128, 10); ctx.stroke();
+  const im = unitImg(k);
+  if (im) fitImg(ctx, im, 88, 206, 118, 114); else ctx.drawImage(thumb(k), 44, 104, 88, 88);
+  ctx.fillStyle = RAR_COL[d.rar]; rbox(162, 86, 44, 16, 8); ctx.fill(); txt(RAR_NAME[d.rar], 184, 94, 9, '#141018', 'center');
+  if (d.role) txt(ROLE_NAME[d.role], 214, 94, 10, '#c9b8ff');
+  sub.forEach((t, i) => txt(t[0], 162, 116 + i * 18, t[2] || 12, t[1]));
+  wrapLines([d.note || ''], W - 24 - 162 - 10, 10).slice(0, 3).forEach((t, i) => txt(t, 162, 116 + sub.length * 18 + 6 + i * 14, 10, '#ffe9a8'));
+}
+function statBoxes(y, items) {
+  const w = (W - 48 - 3 * 6) / 4;
+  items.forEach(([nm, v], i) => {
+    const x = 24 + i * (w + 6);
+    ctx.fillStyle = '#1c1628'; rbox(x, y, w, 40, 8); ctx.fill();
+    txt(nm, x + w / 2, y + 12, 9, '#8a7aa5', 'center'); txt(String(v), x + w / 2, y + 28, 13, '#fff', 'center');
+  });
+}
+function mUnit(m) {
+  const k = m.key, d = DEF[k], T0 = USKILL[k], lv = lvOf(k), st = starOf(k), sm = statMul(k), inT = SAVE.mteam.indexOf(k) >= 0, dp = depthNow();
+  detailHead(k, [['★'.repeat(st) + '☆'.repeat(STAR.max - st), '#ffd35a', 13], ['Lv.' + lv + ' / ' + lvCap(k) + (dp < lvCap(k) ? '  (심도 ' + dp + ')' : ''), '#fff', 12]]);
+  statBoxes(222, [['체력', Math.round(d.hp * sm.hp)], ['공격', Math.round(d.dmg * sm.dmg)], ['사거리', d.rng], ['공격 속도', (1 / d.cd).toFixed(2) + '/초']]);
+  /* 스킬 */
+  let y = 274;
+  if (T0) {
+    const tier = tierAt(lv);
+    ctx.fillStyle = '#1c1628'; rbox(24, y, W - 48, 130, 8); ctx.fill();
+    txt('액티브 · ' + T0.act.name + (tier ? (tier > 1 ? ' +' + (tier - 1) : '') : '  🔒 Lv' + MILESTONE.act), 34, y + 14, 12, tier ? '#ffd35a' : '#8a7aa5');
+    wrapLines([skillDesc(T0.act, Math.max(1, tier))], W - 68, 10).slice(0, 2).forEach((t, i) => txt(t, 34, y + 32 + i * 14, 10, tier ? '#9ae8b5' : '#6b5a85'));
+    txt('패시브 · ' + T0.p1.name + ' (' + passDesc(T0.p1) + ')' + (lv >= MILESTONE.p1 ? '' : '  🔒 Lv' + MILESTONE.p1), 34, y + 68, 10, lv >= MILESTONE.p1 ? '#fff' : '#6b5a85');
+    txt('패시브 · ' + T0.p2.name + ' (' + passDesc(T0.p2) + ')' + (lv >= MILESTONE.p2 ? '' : '  🔒 Lv' + MILESTONE.p2), 34, y + 86, 10, lv >= MILESTONE.p2 ? '#fff' : '#6b5a85');
+    const nm = MS_LV.find(x => x > lv);
+    const nmTxt = nm === MILESTONE.act ? '액티브 개방' : nm === MILESTONE.p1 ? '패시브 「' + T0.p1.name + '」' : nm === MILESTONE.up1 ? '「' + T0.act.name + '」 강화' : nm === MILESTONE.p2 ? '패시브 「' + T0.p2.name + '」' : nm === MILESTONE.up2 ? '「' + T0.act.name + '」 최종 강화' : '';
+    txt(nm ? '다음 스킬: Lv.' + nm + ' ' + nmTxt : '스킬 모두 개방', 34, y + 106, 10, '#c9b8ff');
+    txt(st < STAR.max ? '다음 별 ★' + (st + 1) + ': 능력치 +' + Math.round(STAR.bonus * 100) + '% · 최대 Lv.' + STAR.cap[st] : '최고 성급', 34, y + 122, 10, '#c9b8ff');
+  }
+  /* 버튼: 레벨업 / 승급 / 초기화 / 편성 */
+  y = 418;
+  const cap = lvCap(k), c = lvCost(lv), atCap = lv >= cap, byDepth = !atCap && lv >= dp;
+  btn(24, y, 152, 48, atCap ? 'Lv.' + lv + ' (최대)' : byDepth ? '던전 심도 ' + (lv + 1) + ' 필요' : '레벨업 Lv.' + lv + ' → ' + (lv + 1), () => levelUp(k), {
+    dis:atCap || byDepth || SAVE.gems < c, bg:'#1f3a4a', bc:CUR.gem.col, fs:12,
+    sub:atCap ? (st < STAR.max ? '승급하면 최대 Lv.' + STAR.cap[st] : '최고 레벨') : byDepth ? '관문을 돌파하면 심도가 올라요' : CUR.gem.ico + ' ' + c + '  (보유 ' + SAVE.gems + ')', sc:CUR.gem.col });
+  const can = canPromote(k);
+  btn(184, y, 152, 48, st >= STAR.max ? '★' + st + ' (최고)' : '승급 ★' + st + ' → ★' + (st + 1), () => promote(k), {
+    dis:!can, bg:can ? '#244a2c' : '#1e1829', bc:can ? '#4ee06a' : '#3a2f4d', fs:12,
+    sub:st >= STAR.max ? '카드 ' + cardsOf(k) + '장' : '같은 카드 ' + cardsOf(k) + ' / ' + promoNeed(k) + '장', sc:can ? '#9ae8b5' : '#8a7aa5' });
+  const refund = Math.floor(lvSpent(lv) * RESET_REFUND);
+  btn(24, y + 56, 152, 40, '레벨 초기화', () => {
+    M = { k:'confirm', title:'레벨 초기화', back:{ k:'unit', key:k },
+          text:[d.name + '  Lv.' + lv + ' → Lv.1', '쓴 수정의 ' + Math.round(RESET_REFUND * 100) + '%인 ' + CUR.gem.ico + refund + '을 돌려받아요', '되돌릴 수 없어요'],
+          ok:() => { SAVE.gems += refund; SAVE.lv[k] = 1; if (G) G.skc = {}; persist(); toast(d.name + ' 레벨 초기화 · ' + CUR.gem.ico + refund + ' 환급'); } };
+  }, { dis:lv <= 1, bg:'#3a2430', fs:12, sub:lv > 1 ? CUR.gem.ico + refund + ' 환급' : '', sc:'#ff9aa4' });
+  btn(184, y + 56, 152, 40, inT ? '편성 해제' : '편성하기', () => toggleTeam(k), { bg:inT ? '#2a2140' : '#4a3a63', on:!inT, fs:13 });
+  txt('승급 카드는 소환·별 보상(권속 조각)·일일 상자로 모여요', W / 2, 532, 9, '#8a7aa5', 'center');
+  txt('레벨 ' + MS_LV.join('·') + '는 스킬, 그 밖의 레벨은 공격·체력 +' + Math.round(LVUP.per * 100) + '%', W / 2, 548, 9, '#8a7aa5', 'center');
+}
+function mTrap(m) {
+  const k = m.key, d = DEF[k], e = enhLv(k), sm = statMul(k), inT = SAVE.tteam.indexOf(k) >= 0;
+  detailHead(k, [['Lv.' + (SAVE.own[k] || 1) + ' / ' + MAX_LV + '  (중복으로 레벨 업)', '#fff', 11], ['강화 +' + e + ' / +' + ENH.max, CUR.gem.col, 12]]);
+  const mode = d.mode === 'zone' ? '지속' : d.mode === 'periodic' ? (d.period || 0) + '초마다' : '1회';
+  statBoxes(222, [['피해', d.dmg ? Math.round(d.dmg * sm.dmg) : '-'], ['범위', d.rng], ['발동', mode], ['효과', d.stun ? '기절' : d.slow ? '둔화' : d.push ? '밀기' : '-']]);
+  ctx.fillStyle = '#1c1628'; rbox(24, 274, W - 48, 70, 8); ctx.fill();
+  txt('함정은 침입자가 밟으면 발동해요. 함정 전용 칸(붉은 칸)에도 놓을 수 있어요.', 34, 292, 9, '#c9b8ff');
+  txt('강화 한 단계마다 피해 +' + Math.round(ENH.per * 100) + '% · 같은 함정 카드를 또 얻으면 레벨 업', 34, 310, 9, '#c9b8ff');
+  txt('레벨 ' + MAX_LV + '를 넘은 중복 카드는 ' + CUR.gem.ico + '로 환급돼요', 34, 328, 9, '#8a7aa5');
+  const y = 418, mx = e >= ENH.max, c = enhCost(e);
+  btn(24, y, 152, 48, mx ? '강화 +' + e + ' (최대)' : '강화 +' + e + ' → +' + (e + 1), () => enhance(k), {
+    dis:mx || SAVE.gems < c, bg:'#1f3a4a', bc:CUR.gem.col, fs:12, sub:mx ? '최대 단계' : CUR.gem.ico + ' ' + c + '  (보유 ' + SAVE.gems + ')', sc:CUR.gem.col });
+  btn(184, y, 152, 48, inT ? '편성 해제' : '편성하기', () => toggleTeam(k), { bg:inT ? '#2a2140' : '#4a3a63', on:!inT, fs:13 });
+  const refund = Math.floor(enhSpent(e) * RESET_REFUND);
+  btn(24, y + 56, W - 48, 40, '강화 초기화', () => {
+    M = { k:'confirm', title:'강화 초기화', back:{ k:'trap', key:k },
+          text:[d.name + '  강화 +' + e + ' → +1', '쓴 수정의 ' + Math.round(RESET_REFUND * 100) + '%인 ' + CUR.gem.ico + refund + '을 돌려받아요', '되돌릴 수 없어요'],
+          ok:() => { SAVE.gems += refund; SAVE.enh[k] = 1; persist(); toast(d.name + ' 강화 초기화 · ' + CUR.gem.ico + refund + ' 환급'); } };
+  }, { dis:e <= 1, bg:'#3a2430', fs:12, sub:e > 1 ? CUR.gem.ico + refund + ' 환급' : '', sc:'#ff9aa4' });
+}
+/* 확인 창: 되돌릴 수 없는 일은 한 번 더 묻는다 */
+function mConfirm(m) {
+  panel(36, 230, W - 72, 230, m.title);
+  BTN[0].act = () => { M = m.back || null; };
+  m.text.forEach((t, i) => txt(t, W / 2, 284 + i * 22, i ? 11 : 13, i === m.text.length - 1 ? '#ff9aa4' : '#fff', 'center'));
+  btn(56, 390, 118, 44, '확인', () => { M = m.back || null; m.ok(); }, { bg:'#5d2f3f', fs:14 });
+  btn(W - 174, 390, 118, 44, '취소', () => { M = m.back || null; }, { bg:'#2a2140', fs:14 });
+}
+/* 던전 심도 안내 */
+function mDepth() {
+  const dp = depthNow();
+  panel(24, 120, W - 48, 430, '⛏ 던전 심도 ' + dp);
+  txt('권속은 던전 심도보다 높이 올릴 수 없어요', W / 2, 162, 11, '#fff', 'center');
+  txt('지금 최대 레벨 Lv.' + dp + '  (별마다의 최대 레벨도 그대로 적용)', W / 2, 182, 10, '#c9b8ff', 'center');
+  if (SAVE.cleared < STAGES.length) {
+    const nx = depthNow(SAVE.cleared + 1);
+    ctx.fillStyle = '#2a2140'; rbox(40, 200, W - 80, 52, 10); ctx.fill();
+    txt('다음 단계', 56, 216, 10, '#8a7aa5');
+    txt('제' + (SAVE.cleared + 1) + '관문 돌파 → 심도 ' + nx + ' (최대 Lv.' + nx + ')', 56, 236, 12, '#ffd35a');
+  } else txt('최고 심도에 닿았어요', W / 2, 226, 12, '#6bdc7a', 'center');
+  txt('관문마다 1씩, 장을 넘길 때 크게 올라요', 44, 276, 11, '#c9b8ff');
+  [[0, '시작'], [5, '제5관문 돌파'], [10, '제10관문 돌파'], [15, '제15관문 돌파']].forEach(([c, nm], i) => {
+    const y = 296 + i * 40, got = SAVE.cleared >= c;
+    ctx.fillStyle = got ? '#22331f' : '#1c1628'; rbox(40, y, W - 80, 34, 8); ctx.fill();
+    txt(nm, 56, y + 17, 11, got ? '#9ae8b5' : '#c9b8ff'); txt('심도 ' + depthNow(c) + ' · 최대 Lv.' + depthNow(c), W - 56, y + 17, 11, got ? '#9ae8b5' : '#fff', 'right');
+  });
+  txt('이미 심도보다 높은 권속은 그대로 두고, 그 이상으로만 못 올려요', W / 2, 466, 9, '#8a7aa5', 'center');
+}
+
+/* ================= 추천 덱 =================
+   관문에 나오는 용사 구성(원거리·힐러·전열 비율, 보스)과 길(병목)을 보고 보유한 권속·함정으로 편성을 고른다 */
+function stageProfile(i) {
+  const cnt = { tank:0, melee:0, assassin:0, ranged:0, support:0 };
+  let n = 0, boss = false;
+  if (i !== ENDLESS) { const S = STAGES[i]; for (let w = S.from; w <= S.to; w++) for (const r of WAVES[w]) { const d = DEF[r[0]]; cnt[d.role] += r[1]; n += r[1]; if (d.boss || d.tier === 'hero') boss = true; } }
+  else { cnt.tank = 4; cnt.ranged = 3; cnt.support = 2; n = 9; boss = true; }
+  return { cnt, n:Math.max(1, n), boss, ft:stageFeats(i).F.map(f => f.t) };
+}
+function recommendDeck(i) {
+  const P = stageProfile(i), sh = r => P.cnt[r] / P.n, back = sh('ranged') + sh('support'), tanky = sh('tank'), why = [];
+  const pow = k => { const d = DEF[k], m = statMul(k); return d.hp * m.hp / 40 + d.dmg * m.dmg / d.cd * (d.aoe ? 1.4 : 1); };
+  const fit = k => {
+    const d = DEF[k]; let f = 1;
+    if (back >= 0.25 && (d.role === 'assassin' || d.fly || (d.shot && d.rng >= 110))) f *= 1.3;   /* 뒤에 숨은 원거리·힐러를 잡을 저격형 */
+    if (tanky >= 0.3 && (d.aoe || d.dmg / d.cd >= 25)) f *= 1.25;                                 /* 단단한 전열을 녹일 화력 */
+    if ((P.boss || P.ft.includes('choke')) && d.role === 'tank') f *= 1.2;                          /* 보스·병목은 전열이 버틴다 */
+    return f;
+  };
+  const own = MINIONS.filter(k => SAVE.own[k]).sort((a, b) => pow(b) * fit(b) - pow(a) * fit(a)), cap = mSlots();
+  const m = own.slice(0, cap);
+  if (!m.some(k => DEF[k].role === 'tank')) { const t = own.find(k => DEF[k].role === 'tank'); if (t) { if (m.length < cap) m.push(t); else m[m.length - 1] = t; } }
+  const tpow = k => { const d = DEF[k]; return (d.dmg || 0) * statMul(k).dmg + (d.stun ? 50 : 0) + (d.slow ? 40 * (1 + sh('melee') + sh('assassin')) : 0) + (d.mode === 'zone' || d.mode === 'periodic' ? 30 : 0); };
+  const t = TRAPSL.filter(k => SAVE.own[k]).sort((a, b) => tpow(b) - tpow(a)).slice(0, tSlots());
+  if (back >= 0.25) why.push('원거리·힐러 ' + Math.round(back * 100) + '% → 저격형 우선');
+  if (tanky >= 0.3) why.push('전열이 많아 광역·고화력');
+  if (P.boss) why.push('보스 대비 전열 포함');
+  if (P.ft.includes('choke')) why.push('병목에서 버틸 전열');
+  if (!why.length) why.push('보유한 권속 중 가장 센 조합');
+  return { m, t, why:why.join(' · ') };
+}
+function applyDeck(r) {
+  SAVE.mteam.length = 0; SAVE.mteam.push(...r.m); SAVE.tteam.length = 0; SAVE.tteam.push(...r.t); questAdd('deck'); persist();
+  /* 전투 준비 중이면 세운 카드를 거두고 손패를 새 덱으로 */
+  if (scene === 'game' && G && G.phase === 'prep') {
+    for (let i = 0; i < NROOM; i++) if (G.rooms[i]) { G.sel = i; pickUp(); }
+    G.sel = -1; const hand = {}; for (const k of SAVE.mteam.concat(SAVE.tteam)) hand[k] = 1; G.hand = hand;
+  }
+  toast(SAVE.decks[SAVE.deckI].n + '에 추천 덱을 적용했어요');
+}
+function mRec(m) {
+  const i = m.i, r = recommendDeck(i), S = i === ENDLESS ? { no:'∞', name:'무한의 문' } : STAGES[i];
+  panel(16, 110, W - 32, 470, '✨ 추천 덱 · 제' + S.no + '관문');
+  wrapLines([r.why], W - 72, 11).forEach((t, j) => txt(t, W / 2, 152 + j * 16, 11, '#ffe9a8', 'center'));
+  txt('권속 ' + r.m.length + '/' + mSlots(), 32, 196, 10, '#c9b8ff');
+  r.m.forEach((k, j) => unitTile(k, 30 + (j % 5) * 62, 206 + Math.floor(j / 5) * 76, 58, 70, false));
+  txt('함정 ' + r.t.length + '/' + tSlots(), 32, 372, 10, '#c9b8ff');
+  r.t.forEach((k, j) => unitTile(k, 30 + (j % 8) * 39, 382, 35, 44, false));
+  txt('적용하면 지금 고른 덱(' + SAVE.decks[SAVE.deckI].n + ')의 편성이 바뀌어요', W / 2, 452, 9, '#8a7aa5', 'center');
+  btn(40, 470, W - 80, 46, '현재 덱에 적용', () => { applyDeck(r); M = null; }, { dis:!r.m.length, bg:'#4a3a63', on:true, fs:14 });
+  btn(W / 2 - 50, 524, 100, 34, '닫기', () => { M = null; }, { fs:12 });
+}
+
 function drawPullResult() {
   if (!L.result) return;
   ctx.fillStyle = 'rgba(8,5,14,.95)'; ctx.fillRect(0, 0, W, H);
@@ -2677,48 +2847,68 @@ function drawPullResult() {
 }
 
 /* ================= 상점 ================= */
+/* 상점: [소환] 권속·함정 소환·광고 무료 소환·카드팩·확률표 / [상품] 광고 보상·일일 상자·행동력·광고 제거 */
+const PULL_RATES = [['일반', 65, 'N'], ['희귀', 27, 'R'], ['영웅', 7, 'SR'], ['전설', 1, 'SSR']];   /* rollRarity와 같은 값 */
 function drawShop() {
   BTN = [];
   menuBg();
   menuTitle('상점');
+  const tab = L.shop || 'summon';
+  btn(12, 56, 164, 28, '✨ 소환', () => { L.shop = 'summon'; }, { on:tab === 'summon', bg:tab === 'summon' ? '#4a3a63' : '#1e1829', fs:12 });
+  btn(184, 56, 164, 28, '🛍 상품', () => { L.shop = 'goods'; }, { on:tab === 'goods', bg:tab === 'goods' ? '#4a3a63' : '#1e1829', fs:12 });
   const sec = (y, t) => { txt(t, 14, y, 11, '#c9b8ff'); ctx.fillStyle = '#3a2f4d'; ctx.fillRect(14, y + 8, W - 28, 1); };
   const adI = SAVE.noAds ? '🎁 ' : '🎬 ';
-  sec(64, '광고 보상');
-  const left = adLeftToday(), sl = adSoulLeft();
-  btn(12, 76, 165, 44, adI + (SAVE.noAds ? '' : '광고 보고 ') + CUR.gem.ico + AD_DAILY_GEMS, claimDailyAd, { dis:left <= 0, bg:'#1f3a4a', bc:CUR.gem.col, fs:12, fc:CUR.gem.col,
-      sub:left > 0 ? '오늘 ' + left + '/' + AD_DAILY_MAX + '회 남음' : '내일 다시 열려요', sc:'#c9b8ff' });
-  btn(183, 76, 165, 44, adI + (SAVE.noAds ? '' : '광고 보고 ') + CUR.soul.ico + AD_SOUL.amt, claimAdSoul, { dis:sl <= 0, bg:'#33204a', bc:CUR.soul.col, fs:12, fc:CUR.soul.col,
-      sub:sl > 0 ? '오늘 ' + sl + '/' + AD_SOUL.max + '회 남음' : '내일 다시 열려요', sc:'#c9b8ff' });
-
-  sec(136, '일일 상자 · 권속 카드 ' + DAILY_BOX.min + '~' + DAILY_BOX.max + '장');
-  txt('일반 ' + DAILY_BOX.rates.N + '% · 희귀 ' + DAILY_BOX.rates.R + '% · 영웅 ' + DAILY_BOX.rates.SR + '%', W - 14, 136, 9, '#8a7aa5', 'right');
-  const db = dailyBoxState();
-  btn(12, 148, 165, 44, '📦 무료 상자', () => openDailyBox(false), { dis:!db.free, bg:'#3a3220', bc:'#ffd35a', fs:13, sub:db.free ? '오늘 1회' : '내일 다시 열려요', sc:'#ffe9a8' });
-  btn(183, 148, 165, 44, adI + '상자 하나 더', () => openDailyBox(true), { dis:!db.ad, bg:'#2b3f5a', fs:13,
-      sub:db.ad ? '오늘 1회' : db.free ? '무료 상자를 먼저 열어요' : '내일 다시 열려요', sc:'#9ac8ff' });
-
-  sec(208, '권속 소환 · 카드팩');
-  const p = PULL_COST.minion;
-  btn(12, 220, 165, 44, '권속 소환 ×1', () => doPull('minion', 1), { dis:SAVE.soul < p.one && !(SAVE.tickets > 0), bg:'#33204a', bc:CUR.soul.col, fs:12, sub:SAVE.tickets > 0 ? '🎟 무료 소환권 ' + SAVE.tickets + '장' : CUR.soul.ico + ' ' + p.one, sc:CUR.soul.col });
-  btn(183, 220, 165, 44, '권속 소환 ×10', () => doPull('minion', 10), { dis:SAVE.soul < p.ten, bg:'#392b59', bc:CUR.soul.col, fs:12, sub:CUR.soul.ico + ' ' + p.ten + ' · 희귀 이상 보장', sc:CUR.soul.col });
-  btn(12, 270, W - 24, 44, '🃏 권속 카드팩 (' + CARD_PACK.n + '장)', buyPack, { dis:SAVE.soul < CARD_PACK.soul, bg:'#3a2450', bc:CUR.soul.col, fs:13,
-      sub:CUR.soul.ico + ' ' + CARD_PACK.soul + '  ·  희귀 이상 1장 보장  ·  중복은 승급 카드', sc:CUR.soul.col });
-
-  sec(330, '행동력');
-  const st = stamNow();
-  btn(12, 342, W - 24, 44, CUR.stam.ico + ' 행동력 +' + STAM.buyAmt + ' 충전', () => { M = { k:'stam' }; }, { dis:SAVE.soul < STAM.buySoul, bg:'#3a3220', bc:CUR.stam.col, fs:13,
-      sub:CUR.soul.ico + ' ' + STAM.buySoul + '   ·   지금 ' + st + '/' + STAM.max + '   ·   ' + STAM.regenMin + '분마다 1 회복', sc:CUR.soul.col });
-
-  sec(402, '광고 제거 패키지');
-  ctx.fillStyle = SAVE.noAds ? '#1c2a22' : '#2a1a34'; rbox(12, 414, W - 24, 68, 10); ctx.fill();
-  ctx.strokeStyle = SAVE.noAds ? '#4e8a66' : '#ff7ad9'; ctx.lineWidth = 1.5; rbox(12, 414, W - 24, 68, 10); ctx.stroke();
-  txt('🚫 광고 제거', 26, 432, 14, '#fff');
-  txt('전면 광고가 사라지고, 광고 보상은 광고 없이 바로 받아요', 26, 452, 9, '#c9b8ff');
-  txt('(하루 횟수 제한은 그대로)', 26, 467, 9, '#8a7aa5');
-  if (SAVE.noAds) txt('구매 완료 ✓', W - 26, 448, 12, '#6bdc7a', 'right');
-  else btn(W - 106, 430, 84, 36, NO_ADS.price, () => BILLING.buy(NO_ADS.id), { bg:'#5d2f4f', bc:'#ff7ad9', fs:13 });
-
-  txt(CUR.gem.ico + ' 수정: 레벨업·강화   ' + CUR.soul.ico + ' 영혼석: 소환·카드팩·행동력', W / 2, 500, 10, '#9a8ab5', 'center');
+  if (tab === 'summon') {
+    const pm = PULL_COST.minion, pt = PULL_COST.trap, tix = SAVE.tickets > 0;
+    sec(102, '권속 소환');
+    btn(12, 114, 165, 44, '권속 소환 ×1', () => doPull('minion', 1), { dis:SAVE.soul < pm.one && !tix, bg:'#33204a', bc:CUR.soul.col, fs:12,
+        sub:tix ? '🎟 무료 소환권 ' + SAVE.tickets + '장' : CUR.soul.ico + ' ' + pm.one, sc:CUR.soul.col });
+    btn(183, 114, 165, 44, '권속 소환 ×10', () => doPull('minion', 10), { dis:SAVE.soul < pm.ten, bg:'#392b59', bc:CUR.soul.col, fs:12, sub:CUR.soul.ico + ' ' + pm.ten + ' · 희귀 이상 보장', sc:CUR.soul.col });
+    btn(12, 164, W - 24, 44, '🃏 권속 카드팩 (' + CARD_PACK.n + '장)', buyPack, { dis:SAVE.soul < CARD_PACK.soul, bg:'#3a2450', bc:CUR.soul.col, fs:13,
+        sub:CUR.soul.ico + ' ' + CARD_PACK.soul + '  ·  희귀 이상 1장 보장  ·  중복은 승급 카드', sc:CUR.soul.col });
+    sec(226, '함정 소환');
+    btn(12, 238, 165, 44, '함정 소환 ×1', () => doPull('trap', 1), { dis:SAVE.soul < pt.one, bg:'#33204a', bc:CUR.soul.col, fs:12, sub:CUR.soul.ico + ' ' + pt.one, sc:CUR.soul.col });
+    btn(183, 238, 165, 44, '함정 소환 ×10', () => doPull('trap', 10), { dis:SAVE.soul < pt.ten, bg:'#392b59', bc:CUR.soul.col, fs:12, sub:CUR.soul.ico + ' ' + pt.ten + ' · 희귀 이상 보장', sc:CUR.soul.col });
+    sec(300, '광고 보고 무료 소환');
+    const pl = adPullLeft();
+    btn(12, 312, 165, 40, adI + '권속 ×1', () => adPull('minion'), { dis:pl <= 0, bg:'#2b3f5a', fs:12, sub:pl > 0 ? '오늘 ' + pl + '회 남음' : '내일 다시 열려요', sc:'#9ac8ff' });
+    btn(183, 312, 165, 40, adI + '함정 ×1', () => adPull('trap'), { dis:pl <= 0, bg:'#2b3f5a', fs:12, sub:'권속과 횟수 공유', sc:'#9ac8ff' });
+    sec(370, '등급 확률');
+    PULL_RATES.forEach(([nm, pc, r], i) => {
+      const x = 12 + i * ((W - 24) / 4), w = (W - 24) / 4 - 6;
+      ctx.fillStyle = '#1c1628'; rbox(x, 382, w, 46, 8); ctx.fill();
+      ctx.strokeStyle = RAR_COL[r]; ctx.lineWidth = 1.2; rbox(x, 382, w, 46, 8); ctx.stroke();
+      txt(nm, x + w / 2, 396, 11, RAR_COL[r], 'center'); txt(pc + '%', x + w / 2, 416, 14, '#fff', 'center');
+    });
+    txt('×10과 카드팩은 마지막 장이 희귀 이상', W / 2, 442, 9, '#8a7aa5', 'center');
+    txt('권속 중복은 승급 카드, 함정 중복은 레벨 업 (최대 ' + MAX_LV + ')', W / 2, 458, 9, '#8a7aa5', 'center');
+  } else {
+    sec(102, '광고 보상');
+    const left = adLeftToday(), sl = adSoulLeft();
+    btn(12, 114, 165, 44, adI + (SAVE.noAds ? '' : '광고 보고 ') + CUR.gem.ico + AD_DAILY_GEMS, claimDailyAd, { dis:left <= 0, bg:'#1f3a4a', bc:CUR.gem.col, fs:12, fc:CUR.gem.col,
+        sub:left > 0 ? '오늘 ' + left + '/' + AD_DAILY_MAX + '회 남음' : '내일 다시 열려요', sc:'#c9b8ff' });
+    btn(183, 114, 165, 44, adI + (SAVE.noAds ? '' : '광고 보고 ') + CUR.soul.ico + AD_SOUL.amt, claimAdSoul, { dis:sl <= 0, bg:'#33204a', bc:CUR.soul.col, fs:12, fc:CUR.soul.col,
+        sub:sl > 0 ? '오늘 ' + sl + '/' + AD_SOUL.max + '회 남음' : '내일 다시 열려요', sc:'#c9b8ff' });
+    sec(176, '일일 상자 · 권속 카드 ' + DAILY_BOX.min + '~' + DAILY_BOX.max + '장');
+    txt('일반 ' + DAILY_BOX.rates.N + '% · 희귀 ' + DAILY_BOX.rates.R + '% · 영웅 ' + DAILY_BOX.rates.SR + '%', W - 14, 176, 9, '#8a7aa5', 'right');
+    const db = dailyBoxState();
+    btn(12, 188, 165, 44, '📦 무료 상자', () => openDailyBox(false), { dis:!db.free, bg:'#3a3220', bc:'#ffd35a', fs:13, sub:db.free ? '오늘 1회' : '내일 다시 열려요', sc:'#ffe9a8' });
+    btn(183, 188, 165, 44, adI + '상자 하나 더', () => openDailyBox(true), { dis:!db.ad, bg:'#2b3f5a', fs:13,
+        sub:db.ad ? '오늘 1회' : db.free ? '무료 상자를 먼저 열어요' : '내일 다시 열려요', sc:'#9ac8ff' });
+    sec(250, '행동력');
+    const st = stamNow();
+    btn(12, 262, W - 24, 44, CUR.stam.ico + ' 행동력 +' + STAM.buyAmt + ' 충전', () => { M = { k:'stam' }; }, { dis:SAVE.soul < STAM.buySoul, bg:'#3a3220', bc:CUR.stam.col, fs:13,
+        sub:CUR.soul.ico + ' ' + STAM.buySoul + '   ·   지금 ' + st + '/' + STAM.max + '   ·   ' + STAM.regenMin + '분마다 1 회복', sc:CUR.soul.col });
+    sec(322, '광고 제거 패키지');
+    ctx.fillStyle = SAVE.noAds ? '#1c2a22' : '#2a1a34'; rbox(12, 334, W - 24, 68, 10); ctx.fill();
+    ctx.strokeStyle = SAVE.noAds ? '#4e8a66' : '#ff7ad9'; ctx.lineWidth = 1.5; rbox(12, 334, W - 24, 68, 10); ctx.stroke();
+    txt('🚫 광고 제거', 26, 352, 14, '#fff');
+    txt('광고 보상을 광고 없이 바로 받아요', 26, 372, 9, '#c9b8ff');
+    txt('(하루 횟수 제한은 그대로)', 26, 387, 9, '#8a7aa5');
+    if (SAVE.noAds) txt('구매 완료 ✓', W - 26, 368, 12, '#6bdc7a', 'right');
+    else btn(W - 106, 350, 84, 36, NO_ADS.price, () => BILLING.buy(NO_ADS.id), { bg:'#5d2f4f', bc:'#ff7ad9', fs:13 });
+  }
+  txt(CUR.gem.ico + ' 수정: 레벨업·강화   ' + CUR.soul.ico + ' 영혼석: 소환·카드팩·행동력', W / 2, 600, 10, '#9a8ab5', 'center');
 }
 
 /* ================= 도감 ================= */
@@ -2804,33 +2994,8 @@ function panel(x, y, w, h, title) {
 function drawModal() {
   if (!M) return;
   BTN = [];   /* 아래 화면 버튼은 막는다 */
-  ({ tip:mTip, help:mHelp, story:mStory, exit:mExit, stam:mStam, quest:mQuest, att:mAtt, box:mBox, mail:mMail, clear:mClear, unit:mUnit })[M.k](M);
+  ({ trap:mTrap, confirm:mConfirm, depth:mDepth, rec:mRec, tip:mTip, help:mHelp, story:mStory, exit:mExit, stam:mStam, quest:mQuest, att:mAtt, box:mBox, mail:mMail, clear:mClear, unit:mUnit })[M.k](M);
   BTN.push({ x:0, y:0, w:W, h:H, act:() => {}, label:'팝업 바깥' });
-}
-function mUnit(m) {
-  const k = m.key, d = DEF[k], T = USKILL[k], lv = lvOf(k);
-  panel(14, 90, W - 28, 470, d.name);
-  txt('★'.repeat(starOf(k)) + '☆'.repeat(STAR.max - starOf(k)) + '   Lv.' + lv + ' / ' + lvCap(k) + '   ·   ' + ROLE_NAME[d.role], W / 2, 128, 12, '#ffd35a', 'center');
-  txt('승급 카드 ' + cardsOf(k) + (starOf(k) < STAR.max ? ' / ' + promoNeed(k) + '장' : '장'), W / 2, 148, 10, canPromote(k) ? '#4ee06a' : '#9a8ab5', 'center');
-  if (!T) return;
-  const rows = [
-    [MILESTONE.act, '액티브', T.act.name, skillDesc(T.act, 1)],
-    [MILESTONE.p1, '패시브 1', T.p1.name, passDesc(T.p1)],
-    [MILESTONE.up1, '액티브 강화', T.act.name + ' +', skillDesc(T.act, 2)],
-    [MILESTONE.p2, '패시브 2', T.p2.name, passDesc(T.p2)],
-    [MILESTONE.up2, '최종 강화', T.act.name + ' ++', skillDesc(T.act, 3)],
-  ];
-  rows.forEach(([at, kind, nm, desc], j) => {
-    const y = 166 + j * 66, on = lv >= at;
-    ctx.fillStyle = on ? '#2a2140' : '#1a1524'; rbox(26, y, W - 52, 60, 8); ctx.fill();
-    ctx.strokeStyle = on ? '#ffd35a' : '#3a2f4d'; ctx.lineWidth = 1; rbox(26, y, W - 52, 60, 8); ctx.stroke();
-    txt('Lv' + at, 36, y + 16, 12, on ? '#ffd35a' : '#6b5a85');
-    txt(kind + ' · ' + nm, 80, y + 16, 12, on ? '#fff' : '#8a7aa5');
-    txt(desc, 36, y + 38, 9, on ? '#9ae8b5' : '#6b5a85');
-    if (!on) txt('🔒', W - 40, y + 16, 12, '#6b5a85', 'center');
-  });
-  txt('그 밖의 레벨: 공격·체력 +' + Math.round(LVUP.per * 100) + '%  ·  탱커는 맞을 때, 딜러는 때릴 때 게이지 +' + Math.round(GAUGE_BONUS * 100) + '%', W / 2, 508, 9, '#8a7aa5', 'center');
-  txt('전투 중 하단 초상화의 게이지가 다 차면 탭해서 발동', W / 2, 526, 9, '#8a7aa5', 'center');
 }
 function mStam(m) {
   panel(36, 210, W - 72, 250, '행동력 충전');
@@ -3077,7 +3242,8 @@ function stageCard(c, x, live) {
   ctx.globalAlpha = 1;
   /* 시작 버튼 / 잠김 */
   const st = stamNow(), by2 = y0 + h - 54;
-  if (open) B(L, by2, CARD_W - 32, 44, '출정하기', () => startBattle(i), { bg:'#5d2f3f', on:true, fs:16,
+  if (open) B(L, by2, 92, 44, '✨ 추천 덱', () => { M = { k:'rec', i }; }, { bg:'#3a2a56', fs:12, sub:'보유 카드로', sc:'#c9b8ff' });
+  if (open) B(L + 98, by2, CARD_W - 32 - 98, 44, '출정하기', () => startBattle(i), { bg:'#5d2f3f', on:true, fs:16,
       sub:CUR.stam.ico + ' ' + STAM.cost + ' 소모   (보유 ' + st + ')', sc:st < STAM.cost ? '#ff8a8a' : CUR.stam.col });
   else {
     ctx.fillStyle = 'rgba(8,6,14,.55)'; rbox(x, y0, CARD_W, h, 14); ctx.fill();
@@ -3327,6 +3493,20 @@ function drawScene() {
     ctx.save(); ctx.globalAlpha = 0.55 + Math.sin(T * 8) * 0.2; ctx.strokeStyle = '#8be9ff'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.ellipse(q[0], q[1] - r * 0.6, r, r * 1.3, 0, 0, 7); ctx.stroke(); ctx.restore();
   }
+  /* 맵 위 함정 상태: 작은 반투명 아이콘 + 재발동 링 (주기형) · 쓴 1회용은 흐리게 */
+  if (G.phase === 'run') for (let i = 0; i < NROOM; i++) {
+    const b = G.rooms[i]; if (!b || b.def.kind !== 'trap') continue;
+    const q = proj(b.x, 24, b.z); if (!q) continue;
+    const r = Math.max(5, 7 * (540 / q[2]));
+    ctx.save(); ctx.globalAlpha = b.spent ? 0.3 : 0.7;
+    ctx.fillStyle = 'rgba(12,8,20,.8)'; ctx.beginPath(); ctx.arc(q[0], q[1], r, 0, 7); ctx.fill();
+    ctx.font = (r * 1.2) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(b.def.ico, q[0], q[1] + 0.5);
+    if (b.def.mode === 'periodic' && b.def.period) {
+      const pr = 1 - Math.max(0, b.cd || 0) / b.def.period;
+      ctx.strokeStyle = pr >= 1 ? '#9ae8b5' : '#ffd35a'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(q[0], q[1], r + 2, -Math.PI / 2, -Math.PI / 2 + pr * Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
   if (DBG.on) drawDebug();
   /* 교전 중인 자리: 붉은 원 */
   for (const P of G.parties) if (P.fight) {
@@ -3482,9 +3662,14 @@ function drawGame() {
 
   /* 하단 패널 */
   ctx.fillStyle = '#0c0812'; ctx.fillRect(0, PANEL_Y, W, H - PANEL_Y);
-  const list = SAVE.mteam.concat(SAVE.tteam);
-  const bw = Math.min(46, Math.floor((W - 16 - 4 * (list.length - 1)) / list.length)), gp = 4;
-  const x0 = (W - (bw * list.length + gp * (list.length - 1))) / 2;
+  /* 배치 단계: 권속+함정 전부 / 전투 중: 권속만 크게 + 끝에 [함정 N] (누르면 배치된 함정 목록) / 재배치 중: 함정도 다시 */
+  const run = G.phase === 'run', placedT = SAVE.tteam.filter(k => G.rooms.some(b => b && b.key === k));
+  const list = !run || G.moveFrom >= 0 ? SAVE.mteam.concat(SAVE.tteam) : G.trapOpen ? placedT : SAVE.mteam.slice();
+  const tog = run && G.moveFrom < 0, nCard = Math.max(1, list.length + (tog ? 1 : 0));
+  const bw = Math.min(run ? 60 : 46, Math.floor((W - 16 - 4 * (nCard - 1)) / nCard)), gp = 4;
+  const x0 = (W - (bw * nCard + gp * (nCard - 1))) / 2;
+  if (tog) btn(x0 + list.length * (bw + gp), PANEL_Y + 6, bw, 58, G.trapOpen ? '◀ 권속' : '함정 ' + placedT.length, () => { G.trapOpen = !G.trapOpen; },
+               { bg:G.trapOpen ? '#3a2a56' : '#241d2e', fs:bw < 44 ? 9 : 11, sub:G.trapOpen ? '' : '목록', sc:'#c9b8ff' });
   list.forEach((k, i) => {
     const d = DEF[k], left = G.hand[k] || 0, ok = left > 0 && G.sel >= 0 && !G.rooms[G.sel];
     const x = x0 + i * (bw + gp), y = PANEL_Y + 6;
@@ -3514,7 +3699,17 @@ function drawGame() {
     else ctx.drawImage(thumb(k), x + bw / 2 - 21, y + 3, 42, 42);
     ctx.globalAlpha = 1;
     const lvT = 'Lv' + (d.kind === 'minion' ? lvOf(k) : SAVE.own[k] || 1);
-    txt(full ? '발동!' : act && G.phase === 'run' ? Math.floor(u.g * 100) + '%' : left > 0 ? lvT : (bw < 34 ? '✓' : '배치됨'), x + bw / 2, y + 49, 9,
+    /* 쓰러진 권속: 칸은 남기고 어둡게 (긴급 소환으로 되살아날 대상) */
+    if (run && d.kind === 'minion' && !u && G.revive.some(r => r.key === k)) {
+      ctx.fillStyle = 'rgba(6,4,10,.66)'; rbox(x, y, bw, 58, 7); ctx.fill();
+      txt('쓰러짐', x + bw / 2, y + 49, 9, '#ff8a8a', 'center'); return;
+    }
+    if (run && d.kind === 'trap') {
+      const tb = G.rooms.find(b => b && b.key === k);
+      const ts = !tb ? '' : tb.spent ? '사용됨' : d.mode === 'zone' ? '작동 중' : d.mode === 'periodic' && tb.cd > 0 ? Math.ceil(tb.cd) + '초' : '대기';
+      txt(ts, x + bw / 2, y + 49, 9, tb && tb.spent ? '#6b5a85' : '#9ae8b5', 'center'); return;
+    }
+    txt(full ? '발동!' : act && G.phase === 'run' ? Math.floor(u.g * 100) + '%' : left > 0 ? lvT : (bw < 34 ? '✓' : '배치됨'), x + bw / 2, y + 49, full ? 11 : 9,
         full ? '#ffe36b' : act && G.phase === 'run' ? '#8be9ff' : left > 0 ? '#c9b8ff' : '#6b5a85', 'center');
   });
   const sy = PANEL_Y + 70, sw = 82, sg = 6, sx = (W - (sw * 4 + sg * 3)) / 2;
@@ -3525,7 +3720,7 @@ function drawGame() {
         { dis:!anyHand && !anyRoom, bg:'#3a4a7a', fs:13, sub:'가진 조합을 알아서 세워요', sc:'#b8c8ff' });
     btn(sx + (sw + sg) * 2, sy, sw, 36, '전체 회수', () => { for (let i = 0; i < NROOM; i++) if (G.rooms[i]) { G.sel = i; pickUp(); } G.sel = -1; },
         { dis:!anyRoom, bg:'#3a2f4a', fs:12 });
-    btn(sx + (sw + sg) * 3, sy, sw, 36, G.adBuff ? '소환 완료' : '🎬 긴급 소환', adSummon, { dis:true, bg:'#2b3f5a', fs:11, sub:G.adBuff ? '관문당 1번' : '전투 중 쓰러진 권속 부활', sc:'#9ac8ff' });
+    btn(sx + (sw + sg) * 3, sy, sw, 36, '✨ 추천 덱', () => { M = { k:'rec', i:G.stage }; }, { bg:'#3a2a56', fs:11, sub:'이 관문에 맞게', sc:'#c9b8ff' });
   } else
   SKILLS.forEach((s, i) => {
     const cd = G.scd[s.key], ready = G.phase === 'run' && cd <= 0;
@@ -3571,7 +3766,6 @@ function drawGame() {
     if (G.doubled) { txt('수정 2배 적용됨', W / 2, by + 14, 12, '#6bdc7a', 'center'); by += 34; }
     btn(100, by, W - 200, 40, '나가기', () => {
       goStages(); L.msg = '수정으로 권속과 함정을 더 모아보세요';
-      if (SAVE.battles % 3 === 0) ADS.interstitial();
     }, { fs:13 });
   }
 }
@@ -3693,13 +3887,13 @@ const TUT = [
   { id:'intro1', info:true, say:['깨어났구나, 나의 권속이여.', '용사라는 무리가 내 던전을 털러 몰려오고 있다.'] },
   { id:'intro2', info:true, say:['권속을 불러 모으고 길목을 막아라.', '맨 아래 수호석이 부서지면 우리의 패배다!'] },
   { id:'toShop', say:['먼저 권속을 불러 보자. 아래 「상점」 탭을 눌러라.'], T:() => rectOf(findBtn('탭:상점')), done:() => scene === 'shop' },
-  { id:'pull', say:['무료 소환권 한 장을 주마.', '「권속 소환 ×1」을 눌러라.'], enter:giveTicket,
+  { id:'pull', say:['무료 소환권 한 장을 주마.', '「소환」 탭의 「권속 소환 ×1」을 눌러라.'], enter:() => { giveTicket(); L.shop = 'summon'; },
     T:() => rectOf(findBtn(scene === 'shop' ? '권속 소환 ×1' : '탭:상점')), done:() => !!L.result || !!SAVE.tut.newKey },
   { id:'pulled', say:['새 권속이 왔다! 화면을 눌러 닫아라.'], T:() => FULLR, done:() => !L.result },
   { id:'toDeck', say:['이제 덱에 넣자. 「덱」 탭을 눌러라.'], T:() => rectOf(findBtn('탭:덱')), done:() => scene === 'lobby' },
-  { id:'team', say:['방금 얻은 권속 카드를 두 번 눌러라.', '한 번은 고르기, 한 번 더 누르면 편성이다.'], enter:() => { L.tab = 'minion'; },
-    T:() => rectOf(findBtn(scene === 'lobby' ? '카드:' + SAVE.tut.newKey : '탭:덱')), done:() => !SAVE.tut.newKey || SAVE.mteam.indexOf(SAVE.tut.newKey) >= 0 },
-  { id:'toBattle', say:['좋다. 「전투」 탭으로 가자.'], T:() => rectOf(findBtn('탭:전투')), done:() => scene === 'stages' },
+  { id:'team', say:['방금 얻은 권속 카드를 눌러 상세 창을 열고', '「편성하기」를 눌러라.'], enter:() => { L.tab = 'minion'; },
+    T:() => rectOf(findBtn(M && M.k === 'unit' ? '편성하기' : scene === 'lobby' ? '카드:' + SAVE.tut.newKey : '탭:덱')), done:() => !SAVE.tut.newKey || SAVE.mteam.indexOf(SAVE.tut.newKey) >= 0 },
+  { id:'toBattle', say:['좋다. 「전투」 탭으로 가자.'], enter:() => { M = null; }, T:() => rectOf(findBtn('탭:전투')), done:() => scene === 'stages' },
   { id:'start', say:['제1관문이다. 「출정하기」를 눌러라.'], enter:() => { goCard(0); SS.pos = 0; SS.dx = 0; },
     T:() => rectOf(findBtn(scene === 'stages' ? '출정하기' : '탭:전투')), done:() => scene === 'game' && G.stage === 0 },
   { id:'roads', battle:true, info:true, say:['침입자는 위쪽 입구에서 A·B·C 세 길로 내려온다.', '붉은 점선이 방어 라인. 권속은 그 너머로 나가지 않는다.'], T:mapRect },
@@ -3722,10 +3916,10 @@ const TUT = [
     T:() => rectOf(findBtn(M && M.k === 'clear' ? '받기' : '보상:clear')), done:() => !clrPend(0) },
   { id:'closeRew', say:['받았다! 창을 닫아라.'], skipIf:() => !M, T:() => rectOf(findBtn('✕')), done:() => !M },
   { id:'toDeck2', say:['권속은 수정으로 키운다. 「덱」 탭으로 가자.'], T:() => rectOf(findBtn('탭:덱')), done:() => scene === 'lobby' },
-  { id:'lv', say:['골라 둔 권속의 「레벨업」을 눌러라.'], enter:() => { L.tab = 'minion'; L.info = SAVE.mteam[0]; SAVE.tut.lv0 = lvOf(L.info); },
-    T:() => rectOf(findBtn(scene === 'lobby' ? '레벨업' : '탭:덱')), done:() => !L.info || lvOf(L.info) > (SAVE.tut.lv0 || 1) || SAVE.gems < lvCost(lvOf(L.info)) },
-  { id:'info', say:['이름줄을 누르면 스킬과 승급 정보를 볼 수 있다.'], T:() => rectOf(findBtn('권속 정보')), done:() => !!M && M.k === 'unit' },
-  { id:'promo', info:true, say:['같은 권속 카드를 모으면 「승급」으로 별이 오르고', '최대 레벨이 늘어난다. 카드는 소환과 별 보상 조각으로 모인다.'] },
+  { id:'lv', say:['편성한 권속 카드를 눌러 상세 창을 열고', '「레벨업」을 눌러라.'], enter:() => { L.tab = 'minion'; SAVE.tut.lvKey = SAVE.mteam[0]; SAVE.tut.lv0 = lvOf(SAVE.tut.lvKey); },
+    T:() => rectOf(findBtn(M && M.k === 'unit' ? '레벨업' : scene === 'lobby' ? '카드:' + SAVE.tut.lvKey : '탭:덱')),
+    done:() => { const k = SAVE.tut.lvKey; return !k || lvOf(k) > (SAVE.tut.lv0 || 1) || SAVE.gems < lvCost(lvOf(k)) || lvOf(k) >= lvLimit(k); } },
+  { id:'promo', info:true, say:['같은 권속 카드를 모으면 이 창의 「승급」으로 별이 오르고', '최대 레벨이 늘어난다. 레벨은 「던전 심도」만큼만 올릴 수 있다.'] },
   { id:'end', info:true, say:['이걸로 기초는 끝이다. 던전을 지켜라, 나의 권속이여!', '설명은 ❓ 도움말에서 다시 볼 수 있다.'], enter:() => { M = null; } },
 ];
 function tutOn() { return !!SAVE.tut && typeof SAVE.tut.s === 'number' && SAVE.tut.s < TUT.length; }
@@ -3824,13 +4018,15 @@ const TIPS = {
   spells: { t:'마왕의 마법', l:['포효: 전체 피해 + 기절', '운석: 누른 뒤 맵을 눌러 광역 피해', '광기: 8초간 권속 공격 속도 2배', '결계: 3초간 침입자 전원 정지'] },
   trap:   { t:'함정과 지형', l:['길 위의 붉은 칸은 함정 전용 칸이에요. 함정은 침입자가 밟으면 터져요.', '관문마다 병목(받는 피해 감소)·늪(침입자 감속)·제단(근처 권속 공격력 증가) 위치가 달라요.'] },
   emerg:  { t:'긴급 소환', l:['전투 중 쓰러진 권속을 체력 25%로 수호석에서 되살려요.', '되살아난 권속은 가장 가까운 침입자에게 달려가요. 관문당 한 번.'] },
-  grow:   { t:'레벨업과 승급', l:['덱에서 권속을 고르고 수정으로 레벨업해요.', '같은 권속 카드를 모으면 승급해서 별이 오르고 최대 레벨이 늘어나요.'] },
+  grow:   { t:'레벨업과 승급', l:['덱에서 카드를 누르면 상세 창이 열려요. 거기서 수정으로 레벨업해요.', '같은 권속 카드를 모으면 승급해서 별이 오르고 최대 레벨이 늘어나요.', '레벨 초기화를 하면 쓴 수정의 절반을 돌려받아요.'] },
+  depth:  { t:'던전 심도', l:['권속은 던전 심도보다 높이 올릴 수 없어요.', '관문을 돌파할 때마다 1씩, 장(5관문)을 넘길 때 크게 올라요.', '덱 화면 위쪽 ⛏ 던전 심도를 누르면 다음 단계를 볼 수 있어요.'] },
+  rec:    { t:'추천 덱 · 덱 1·2·3', l:['덱 화면 위의 덱 1·2·3마다 편성이 따로 저장돼요. 고른 덱을 한 번 더 누르면 이름을 바꿔요.', '관문 카드와 전투 준비 화면의 「✨ 추천 덱」은 그 관문 적과 길에 맞는 편성을 골라 줘요.'] },
   levels: { t:'레벨 제한', l:['권속은 별마다 최대 레벨이 있어요 (1성 Lv10 · 2성 Lv20 … 5성 Lv50).', '최대 레벨이면 같은 권속 카드로 승급해야 더 키울 수 있어요.'] },
   auto:   { t:'배치 추천', l:['「✨ 배치 추천」은 가진 카드를 이번 웨이브에 맞게 알아서 세워 줘요.', '세운 뒤 마음에 안 드는 칸은 「재배치」·「회수」로 고칠 수 있어요.'] },
   shop:   { t:'상점', l:['영혼석으로 권속·함정을 소환하고 카드팩과 행동력을 살 수 있어요.', '광고 보상과 일일 상자는 매일 다시 열려요.', '🚫 광고 제거 패키지를 사면 광고 없이 보상을 바로 받아요.'] },
   endless:{ t:'무한의 문', l:['모든 관문을 돌파하면 열려요.', '끝없이 밀려오는 침입자를 몇 웨이브까지 막는지 겨루고, 최고 기록이 남아요.'] },
 };
-const HELP_ORDER = ['basics', 'place', 'spells', 'trap', 'emerg', 'grow', 'levels', 'auto', 'shop', 'endless'];
+const HELP_ORDER = ['basics', 'place', 'spells', 'trap', 'emerg', 'grow', 'depth', 'rec', 'auto', 'shop', 'endless', 'levels'];
 function tipOnce(id) { if (tutOn() || SAVE.tut.seen[id]) return; if (!M) M = { k:'tip', id }; }
 /* 기능이 처음 열릴 때 */
 function tipCheck() {
