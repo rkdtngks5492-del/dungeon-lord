@@ -3,12 +3,15 @@ package com.dungeonlord.game;
 import android.annotation.SuppressLint;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
@@ -34,6 +37,8 @@ public class MainActivity extends AppCompatActivity {
     private RewardedAd rewarded;
     private InterstitialAd interstitial;
     private boolean earned = false;
+    /* 광고가 떠 있는 동안에는 뒤로 가기·백그라운드 신호를 게임에 보내지 않는다 */
+    private boolean adShowing = false;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -55,12 +60,28 @@ public class MainActivity extends AppCompatActivity {
         web.setBackgroundColor(0xFF0B0712);
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
         web.addJavascriptInterface(new AdBridge(), "AndroidAds");
+        web.addJavascriptInterface(new AppBridge(), "AndroidApp");
         /* TODO: 결제 연동을 마치면 아래 줄의 주석을 푼다. 그 전에는 게임이 "Play 스토어 등록 후 열려요"라고 안내한다 */
         // web.addJavascriptInterface(new BillingBridge(), "AndroidBilling");
         web.loadUrl("file:///android_asset/index.html");
         setContentView(web);
 
         hideSystemBars();
+
+        /* 뒤로 가기는 게임(window.onBack)이 처리한다: 팝업 닫기 · 일시정지 · 탭 이동 · 종료 확인 */
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override public void handleOnBackPressed() {
+                if (adShowing) return;
+                web.evaluateJavascript("window.onBack && window.onBack()", null);
+            }
+        });
+    }
+
+    /* 홈 버튼·전화 등으로 앱이 가려지면 전투를 일시정지한다 */
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (web != null && !adShowing) web.evaluateJavascript("window.onAppPause && window.onAppPause()", null);
     }
 
     private void hideSystemBars() {
@@ -114,13 +135,13 @@ public class MainActivity extends AppCompatActivity {
                     replyToGame(false);
                     return;
                 }
-                earned = false;
+                earned = false; adShowing = true;
                 rewarded.setFullScreenContentCallback(new FullScreenContentCallback() {
                     @Override public void onAdDismissedFullScreenContent() {
-                        rewarded = null; loadRewarded(); replyToGame(earned);
+                        adShowing = false; rewarded = null; loadRewarded(); replyToGame(earned);
                     }
                     @Override public void onAdFailedToShowFullScreenContent(@NonNull AdError e) {
-                        rewarded = null; loadRewarded(); replyToGame(false);
+                        adShowing = false; rewarded = null; loadRewarded(); replyToGame(false);
                     }
                 });
                 rewarded.show(MainActivity.this, r -> earned = true);
@@ -131,12 +152,13 @@ public class MainActivity extends AppCompatActivity {
         public void showInterstitial() {
             runOnUiThread(() -> {
                 if (interstitial == null) { loadInterstitial(); return; }
+                adShowing = true;
                 interstitial.setFullScreenContentCallback(new FullScreenContentCallback() {
                     @Override public void onAdDismissedFullScreenContent() {
-                        interstitial = null; loadInterstitial();
+                        adShowing = false; interstitial = null; loadInterstitial();
                     }
                     @Override public void onAdFailedToShowFullScreenContent(@NonNull AdError e) {
-                        interstitial = null; loadInterstitial();
+                        adShowing = false; interstitial = null; loadInterstitial();
                     }
                 });
                 interstitial.show(MainActivity.this);
@@ -160,9 +182,19 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Override
-    public void onBackPressed() {
-        /* 게임이 캔버스 한 장이라 뒤로가기로 돌아갈 화면이 없다. 앱을 내린다 */
-        moveTaskToBack(true);
+    /* ---------- 앱 기능 창구 (종료 · 진동) ---------- */
+    public class AppBridge {
+        /* 게임의 "게임을 종료할까요?"에서 종료를 누르면 */
+        @JavascriptInterface
+        public void exit() { runOnUiThread(MainActivity.this::finish); }
+
+        @JavascriptInterface
+        public void vibrate(int ms) {
+            Vibrator v = (Vibrator) getSystemService(VIBRATOR_SERVICE);
+            if (v == null || !v.hasVibrator()) return;
+            long t = Math.max(1, Math.min(1000, ms));
+            if (Build.VERSION.SDK_INT >= 26) v.vibrate(VibrationEffect.createOneShot(t, VibrationEffect.DEFAULT_AMPLITUDE));
+            else v.vibrate(t);
+        }
     }
 }
