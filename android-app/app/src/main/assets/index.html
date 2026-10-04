@@ -11,6 +11,10 @@ canvas{position:absolute}
 </head>
 <body>
 <canvas id="c" width="360" height="700"></canvas>
+<!-- 수치 데이터: 화폐·행동력·강화 / 도감 / 보상. 숫자는 이 파일들에서 고친다 -->
+<script src="data/currency.js"></script>
+<script src="data/codex.js"></script>
+<script src="data/rewards.js"></script>
 <script>
 /* =========================================================
    마왕의 던전 - 프로토타입 v0.5
@@ -127,10 +131,12 @@ function unitImg(key) {
   if (!im) { im = _IMG[key] = new Image(); im.src = src; }
   return im.complete && im.naturalWidth ? im : null;
 }
-/* 피격 섬광용 흰색 실루엣을 한 번만 만들어 캐시 */
+/* 피격 섬광용 흰색 실루엣(도감 미발견은 검은색)을 한 번만 만들어 캐시 */
 const _WH = new Map();
-function whiteOf(im) {
-  if (_WH.has(im)) return _WH.get(im);
+function whiteOf(im, col) {
+  col = col || '#fff';
+  let cache = _WH.get(col); if (!cache) _WH.set(col, cache = new Map());
+  if (cache.has(im)) return cache.get(im);
   let w = null;
   try {
     const c = document.createElement('canvas');
@@ -138,10 +144,10 @@ function whiteOf(im) {
     const g = c.getContext('2d');
     g.drawImage(im, 0, 0);
     g.globalCompositeOperation = 'source-atop';
-    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = col; g.fillRect(0, 0, c.width, c.height);
     w = c;
   } catch (e) { w = null; }
-  _WH.set(im, w); return w;
+  cache.set(im, w); return w;
 }
 const BB = [], NOOPT = {};
 /* o = { flip, tilt, sx, sy, alpha, flash, shadow } */
@@ -587,13 +593,18 @@ const DEF = {
             art:{ shape:'burly', body:'#f4f4f4', accent:'#ffd35a', helm:true, weapon:'axe', cape:'#ffd35a', crest:'#ff6b6b' } },
   boss3:  { ico:'👑', side:'H', tier:'boss', name:'대현자 이스라', hp:1900, dmg:34, rng:118, cd:2.2, spd:17, rew:320, sc:58, boss:true, skill:'smite', skname:'심판의 빛', aoe:true, shot:true,
             art:{ shape:'burly', body:'#4a4a8a', accent:'#2a2a5a', hood:true, weapon:'staff', glow:'#8be9ff' } },
+  /* ---- 네임드로만 나오는 용사 (도감용). 그림은 기존 용사 그림을 빌려 쓴다 ---- */
+  assassin:{ ico:'🥷', side:'H', tier:'knight', name:'암살자', hp:120, dmg:16, rng:26, cd:0.7, spd:44, rew:8, sc:38,
+            art:{ shape:'burly', body:'#2a2432', accent:'#101018', hood:true, weapon:'dagger', eyes:'#ff4a4a' } },
+  heroking:{ ico:'🤴', side:'H', tier:'hero', name:'용사 왕', hp:1500, dmg:30, rng:32, cd:1.0, spd:18, rew:90, sc:58,
+            art:{ shape:'burly', body:'#f4ecd0', accent:'#ffd35a', helm:true, weapon:'greatsword', cape:'#7a1a8a', crest:'#ffd35a' } },
 };
 /* 보스 그림 별칭: 새 그림이 오기 전까지 기존 용사 그림을 쓴다 */
 /* 역할: 전열(tank)은 '도발' — 근접 공격은 전열부터 때려야 한다. 암살(assassin)·비행은 도발을 무시하고,
    원거리(ranged)는 지원 > 원거리 > 근접 > 전열 순으로 약한 쪽부터 노린다. */
 const ROLE = { wolf:'assassin', zombie:'tank', spider:'ranged', darkkn:'tank', succub:'ranged', lich:'ranged', demon:'tank', slime:'tank', golem:'tank', goblin:'melee', imp:'melee', bat:'assassin', skel:'ranged', ghost:'ranged', witch:'ranged', dragon:'ranged',
                vagrant:'melee', trainee:'tank', looter:'assassin', lancer:'tank', ranger:'ranged', cleric:'support', warlock:'ranged', champion:'tank', paladin:'tank',
-               boss1:'tank', boss2:'tank', boss3:'ranged' };
+               boss1:'tank', boss2:'tank', boss3:'ranged', assassin:'assassin', heroking:'tank' };
 for (const k in ROLE) DEF[k].role = ROLE[k];
 DEF.cleric.heal = 0.08;   /* 아군 최대 체력의 비율로 회복 */
 const ROLE_PRI = { support:0, ranged:1, assassin:1, melee:2, tank:3 };
@@ -613,7 +624,7 @@ const MAX_LV = 5, MSLOT_MAX = 10, TSLOT_MAX = 8;
 const MS_AT = [4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 9, 10, 10, 10, 10];
 const TS_AT = [3, 3, 4, 4, 5, 5, 6, 6, 6, 7, 7, 7, 8, 8, 8, 8];
 function mSlots(c) { c = c === undefined ? SAVE.cleared : c; return MS_AT[Math.max(0, Math.min(MS_AT.length - 1, c))]; }
-function tSlots(c) { c = c === undefined ? SAVE.cleared : c; return TS_AT[Math.max(0, Math.min(TS_AT.length - 1, c))]; }
+function tSlots(c) { c = c === undefined ? SAVE.cleared : c; return TS_AT[Math.max(0, Math.min(TS_AT.length - 1, c))] + dexBonus().trapSlot; }
 /* 다음에 칸이 늘어나는 관문(돌파 수 기준)과 새 칸 수 */
 function nextSlotInfo(kind) {
   const f = kind === 'minion' ? mSlots : tSlots, cur = f(SAVE.cleared);
@@ -666,6 +677,7 @@ const AFFIX = {
   swift: { name:'질주', col:'#8be9ff', hp:0.85, dmg:1.00, spd:1.55, sc:0.96 },
   armor: { name:'강철', col:'#c0c8d4', hp:1.40, dmg:1.10, spd:0.90, sc:1.08, dr:0.35 },
   rage:  { name:'광포', col:'#ff6b6b', hp:1.15, dmg:1.50, spd:1.15, sc:1.06, cd:0.72 },
+  named: NAMED_AFFIX,   /* 5·10·15관문 네임드 용사 (data/codex.js) */
 };
 const STAGE_NAMES = ['바깥 통로', '지하 묘지', '돌의 회랑', '폐허의 문', '선봉대 막사',
                      '성채 입구', '피의 회랑', '옥좌의 길', '봉인된 성소', '성기사단 본진',
@@ -714,26 +726,131 @@ const SKILLS = [
 const MOVE_CD = 9, WAVE_GEMS = 25;
 /* 쓰러진 부하가 제 방으로 되살아나기까지 걸리는 시간 (등급이 높을수록 길다) */
 const REVIVE = { N:10, R:13, SR:16, SSR:21 };
-const PULL = { minion:{ one:100, ten:900 }, trap:{ one:80, ten:720 } };
 
 /* ================= 저장 ================= */
 const SAVE_KEY = 'dungeon_lord_save_v5';
 function defaultSave() {
   return { gems:600, own:{ slime:1, goblin:1, golem:1, spikes:1, web:1 },
-           mteam:['golem','slime','goblin'], tteam:['spikes','web'], cleared:0, mute:false, endlessBest:0, adDay:'', adCount:0, battles:0 };
+           mteam:['golem','slime','goblin'], tteam:['spikes','web'], cleared:0, mute:false, endlessBest:0, adDay:'', adCount:0, battles:0,
+           /* v9: 영혼석·행동력·강화·별·도감·보상 */
+           soul:START_SOUL, stam:STAM.max, stamT:0, enh:{}, stars:{}, heroDex:{}, dexGot:{}, adSoulCount:0,
+           dq:null, att:{ n:0, day:'' }, boxT:0, mailGot:{}, clr:{ s:{}, m:{} } };
+}
+/* 옛 저장에는 새 항목이 없다. 없거나 모양이 다른 항목만 기본값으로 채운다 */
+function migrate(s) {
+  const d = defaultSave();
+  for (const k in d) {
+    const a = s[k], b = d[k];
+    if (a === undefined || a === null || typeof a !== typeof b || Array.isArray(a) !== Array.isArray(b)) s[k] = b;
+    else if (typeof b === 'number' && !isFinite(a)) s[k] = b;
+  }
+  if (!(s.att.n >= 0 && s.att.n < ATTEND.length)) s.att.n = 0;
+  if (!s.clr.s || typeof s.clr.s !== 'object') s.clr.s = {};
+  if (!s.clr.m || typeof s.clr.m !== 'object') s.clr.m = {};
+  return s;
 }
 function loadSave() {
-  try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.own && s.mteam) return s; } catch (e) {}
+  try { const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if (s && s.own && s.mteam) return migrate(s); } catch (e) {}
   return defaultSave();
 }
 let SAVE = loadSave();
 function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); } catch (e) {} }
 
+/* ================= 화폐 · 행동력 · 강화 ================= */
+function grant(r, mul) {
+  const g = (r.gems || 0) * (mul || 1), s = r.soul || 0;
+  SAVE.gems += g; SAVE.soul += s; persist(); SFX.reveal(s ? 'SR' : 'R');
+  toast([g ? CUR.gem.ico + g : '', s ? CUR.soul.ico + s : ''].filter(Boolean).join(' + ') + ' 받았어요');
+}
+/* 보상 받기. ◆가 들어 있으면 광고를 보고 ◆만 2배로 받을 수 있다 (영혼석은 그대로) */
+function claim(r, ad, mark) {
+  if (!ad || !r.gems) { mark(); grant(r, 1); return; }
+  ADS.rewarded(CUR.gem.ico + ' 2배', ok => { if (ok) { mark(); grant(r, 2); } });
+}
+/* 행동력은 저장된 시각부터 흐른 시간으로 계산하므로 앱을 꺼 둬도 회복된다 */
+function stamNow() {
+  const now = Date.now(), per = STAM.regenMin * 60000;
+  if (!(SAVE.stamT > 0) || SAVE.stamT > now) SAVE.stamT = now;   /* 처음이거나 시계가 거꾸로 갔으면 지금부터 */
+  if (SAVE.stam >= STAM.max) { SAVE.stamT = now; return SAVE.stam; }
+  const n = Math.floor((now - SAVE.stamT) / per);
+  if (n > 0) { SAVE.stam = Math.min(STAM.max, SAVE.stam + n); SAVE.stamT += n * per; if (SAVE.stam >= STAM.max) SAVE.stamT = now; }
+  return SAVE.stam;
+}
+function stamNext() { return Math.max(0, STAM.regenMin * 60000 - (Date.now() - SAVE.stamT)); }
+function buyStam() {
+  if (SAVE.soul < STAM.buySoul) { toast(CUR.soul.name + '이 부족해요'); return false; }
+  stamNow(); SAVE.soul -= STAM.buySoul; SAVE.stam += STAM.buyAmt; persist();
+  toast(CUR.stam.name + ' +' + STAM.buyAmt); SFX.reveal('R'); return true;
+}
+function enhLv(k) { return Math.max(1, Math.min(ENH.max, SAVE.enh[k] || 1)); }
+function enhCost(e) {
+  const c = ENH.cost;
+  return e - 1 < c.length ? c[e - 1] : Math.round(c[c.length - 1] * Math.pow(ENH.grow, e - c.length));
+}
+function enhance(k) {
+  if (!SAVE.own[k]) return;
+  const e = enhLv(k); if (e >= ENH.max) { toast('최대 강화 단계예요'); return; }
+  const c = enhCost(e); if (SAVE.gems < c) { toast(CUR.gem.name + '이 부족해요'); return; }
+  SAVE.gems -= c; SAVE.enh[k] = e + 1; persist();
+  toast(DEF[k].name + ' 강화 +' + (e + 1) + ' 성공!'); SFX.reveal('SR');
+}
+/* 레벨(중복) × 강화 × 도감 보너스를 합친 능력치 배율 */
+function statMul(k) {
+  const b = dexBonus(), m = lvMult(SAVE.own[k] || 1) * (1 + ENH.per * (enhLv(k) - 1));
+  if (DEF[k].kind === 'trap') return { hp:m, dmg:m * (1 + b.trapDmg) };
+  return { hp:m * (1 + b.minHp + b.all), dmg:m * (1 + b.minAtk + b.all) };
+}
+
+/* ================= 도감 ================= */
+function dexHas(tab, k) { return tab === 'hero' ? !!SAVE.heroDex[k] : !!SAVE.own[k]; }
+function dexFound(tab) { return CODEX[tab].keys.filter(k => dexHas(tab, k)).length; }
+function dexCanClaim(tab, i) { return !SAVE.dexGot[tab + i] && dexFound(tab) >= Math.ceil(CODEX[tab].tiers[i].at * CODEX[tab].keys.length - 1e-9); }
+function dexTabCan(tab) { return CODEX[tab].tiers.some((t, i) => dexCanClaim(tab, i)); }
+function dexAnyClaim() { return Object.keys(CODEX).some(dexTabCan); }
+function dexClaim(tab, i) {
+  if (!dexCanClaim(tab, i)) return;
+  SAVE.dexGot[tab + i] = 1; grant({ soul:CODEX[tab].tiers[i].soul }, 1);
+}
+function dexBonus() {
+  const b = { minAtk:0, minHp:0, all:0, trapDmg:0, trapSlot:0, heroGem:0, lordHp:0 };
+  for (const t in CODEX) CODEX[t].tiers.forEach((r, i) => { if (SAVE.dexGot[t + i]) for (const k in r.fx) b[k] = (b[k] || 0) + r.fx[k]; });
+  return b;
+}
+
+/* ================= 보상 ================= */
+function dq() {
+  const q = SAVE.dq;
+  if (!q || q.day !== todayKey() || typeof q.prog !== 'object' || typeof q.got !== 'object') SAVE.dq = { day:todayKey(), prog:{}, got:{}, all:false };
+  return SAVE.dq;
+}
+function questAdd(id, n) { const q = dq(); q.prog[id] = (q.prog[id] || 0) + (n || 1); }
+function questDone(Q) { return (dq().prog[Q.id] || 0) >= Q.need; }
+function questCan(Q) { return questDone(Q) && !dq().got[Q.id]; }
+function questAllCan() { return !dq().all && DAILY_QUESTS.every(questDone); }
+function attCan() { return SAVE.att.day !== todayKey(); }
+function boxLeft() {
+  const now = Date.now();
+  if (!(SAVE.boxT <= now)) SAVE.boxT = now;   /* 시계가 거꾸로 갔으면 지금부터 다시 */
+  return Math.max(0, SAVE.boxT + BOX.hours * 3600000 - now);
+}
+function mailCan() { return MAIL.some(m => !SAVE.mailGot[m.id]); }
+/* 별 기록이 없는 옛 저장의 돌파 관문은 별 1개로 본다 */
+function starsOf(i) { return SAVE.stars[i] || (SAVE.cleared > i ? 1 : 0); }
+function clrPend(i) { return (SAVE.clr.s[i] || 0) < starsOf(i); }
+function clrStageRew(i) { let g = 0; for (let s = SAVE.clr.s[i] || 0; s < starsOf(i); s++) g += CLEAR_REWARD.stars[s] || 0; return g; }
+function clrMileCan(n) { return SAVE.cleared >= n && !SAVE.clr.m[n]; }
+function clrCan() { return STAGES.some((S, i) => clrPend(i)) || Object.keys(CLEAR_REWARD.milestone).some(clrMileCan); }
+function rewardDots() {
+  return { quest:DAILY_QUESTS.some(questCan) || questAllCan(), att:attCan(), box:boxLeft() <= 0, mail:mailCan(), clear:clrCan() };
+}
+function rewardAny() { const d = rewardDots(); return d.quest || d.att || d.box || d.mail || d.clear; }
+
 function rollRarity() { const r = Math.random() * 100; return r < 1 ? 'SSR' : r < 8 ? 'SR' : r < 35 ? 'R' : 'N'; }
 function pickFrom(pool, rar) { const p = pool.filter(k => DEF[k].rar === rar); return p[Math.floor(Math.random() * p.length)]; }
 function doPull(cat, n, free) {
-  const pool = cat === 'minion' ? MINIONS : TRAPSL, cost = n === 10 ? PULL[cat].ten : PULL[cat].one;
-  if (!free) { if (SAVE.gems < cost) { L.msg = '수정이 부족해요. 관문을 더 돌아보세요'; return; } SAVE.gems -= cost; }
+  const pool = cat === 'minion' ? MINIONS : TRAPSL, cost = n === 10 ? PULL_COST[cat].ten : PULL_COST[cat].one;
+  if (!free) { if (SAVE.soul < cost) { toast(CUR.soul.name + '이 부족해요. 상점과 보상에서 모아보세요'); return; } SAVE.soul -= cost; }
+  if (cat === 'minion') questAdd('pull');
   const res = []; let rare = false;
   for (let i = 0; i < n; i++) {
     let r = rollRarity();
@@ -762,6 +879,7 @@ function toggleTeam(key) {
   if (i >= 0) team.splice(i, 1);
   else if (team.length >= cap) { L.msg = (isM ? '부하' : '함정') + ' 슬롯이 ' + cap + '칸으로 꽉 찼어요'; return; }
   else team.push(key);
+  questAdd('deck');
   persist();
 }
 
@@ -975,15 +1093,19 @@ function vcyNow() { return VCY + ((STG.y0 + STG.h + PANEL_Y) / 2 + 4 - VCY) * ST
 function fovNow() { return FOV + (420 - FOV) * STG.k; }
 
 /* ================= 상태 ================= */
-let scene = 'lobby';
-const L = { msg:'카드를 눌러 덱을 편성하세요', result:null, tab:'minion', info:null };
+let scene = 'stages';
+const L = { msg:'카드를 눌러 덱을 편성하세요', result:null, tab:'minion', info:null, dex:'minion' };
+let M = null;                                   /* 메뉴 위에 뜨는 팝업 { k:'stage'|'stam'|'quest'|'att'|'box'|'mail'|'clear', ... } */
+const TOAST = { msg:'', t:0 };
+function toast(m) { TOAST.msg = m; TOAST.t = 2.4; L.msg = m; }
 let G;
 function reset(stage) {
   const hand = {}; for (const k of SAVE.mteam.concat(SAVE.tteam)) hand[k] = 1;
   const scd = {}; for (const s of SKILLS) scd[s.key] = 0;
   const endless = stage === ENDLESS;
   const S = endless ? { stone:300, name:'무한의 문', no:'∞' } : STAGES[stage];
-  G = { stage, endless, stone:S.stone, maxStone:S.stone, wIdx:0, phase:'prep', heroes:[], rooms:new Array(NROOM).fill(null),
+  const stone = Math.round(S.stone * (1 + dexBonus().lordHp)), np = !endless && NAMED_POOL[stage];
+  G = { stage, endless, stone, maxStone:stone, wIdx:0, named:np ? np[Math.floor(Math.random() * np.length)] : null, phase:'prep', heroes:[], rooms:new Array(NROOM).fill(null),
         hand, sel:-1, parties:[], pending:[], plan:null, waveT:0, speed:1, fx:[], parts:[], meteors:[], bolts:[], corpses:[], revive:[],
         msg:'빈 칸을 누르고 카드를 배치하세요', msgT:4, gems:0, done:false, doubled:false, usedContinue:false,
         scd, frenzy:0, seal:0, aim:null, moveFrom:-1, moveCd:0, hs:0, smites:[] };
@@ -994,8 +1116,10 @@ function say(t) { G.msg = t; G.msgT = 3; }
 function stageOpen(i) { return i === ENDLESS ? SAVE.cleared >= STAGES.length : i <= SAVE.cleared; }
 function curStage() { return G.endless ? { no:'∞', name:'무한의 문' } : STAGES[G.stage]; }
 function startBattle(i) {
-  if (!stageOpen(i)) { L.msg = i === ENDLESS ? '모든 관문을 돌파하면 열려요' : '앞 관문을 먼저 돌파해야 열려요'; return; }
-  if (!SAVE.mteam.length) { L.msg = '부하를 최소 1명은 편성해야 해요'; return; }
+  if (!stageOpen(i)) { toast(i === ENDLESS ? '모든 관문을 돌파하면 열려요' : '앞 관문을 먼저 돌파해야 열려요'); return; }
+  if (!SAVE.mteam.length) { toast('부하를 최소 1명은 편성해야 해요'); return; }
+  if (stamNow() < STAM.cost) { M = { k:'stam', then:i }; return; }
+  SAVE.stam -= STAM.cost; persist(); M = null;
   buildMap(chapterOf(i)); reset(i); scene = 'game'; camSnap('prep');
 }
 function finishBattle() {
@@ -1016,6 +1140,11 @@ function finishBattle() {
     G.first = first;
     G.gems += G.bonus;
     if (first) SAVE.cleared = Math.min(STAGES.length, G.stage + 1);
+    /* 별: 남은 수호석 비율로 1~3개 */
+    const r = G.stone / G.maxStone;
+    G.stars = CLEAR_REWARD.starAt.filter(a => r >= a).length;
+    SAVE.stars[G.stage] = Math.max(SAVE.stars[G.stage] || 0, G.stars);
+    questAdd('clear');
   }
   SAVE.gems += G.gems; persist();
 }
@@ -1052,7 +1181,7 @@ function foeFor(att, elig, reach) {
 }
 /* 함정 발동: 밟은 순간 반경 안의 무리 전체에 한 번에 터진다 */
 function fireTrap(b) {
-  const d = b.def, k = 0.6 + 0.4 * waveMul(), lvm = lvMult(SAVE.own[b.key] || 1);
+  const d = b.def, k = 0.6 + 0.4 * waveMul(), lvm = statMul(b.key).dmg;
   const dmg = b.dmg * k;
   b.spent = true; b.flash = 0.6;
   const vic = G.heroes.filter(h => unitSees(b, h) && dist2(h.x, h.z, b.x, b.z) <= d.rng);
@@ -1148,7 +1277,9 @@ function waveMul() { return G.endless ? endlessMul(G.wIdx) : STAGES[G.stage].mul
 function rng32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 /* 웨이브를 '길별 무리'로 나눈다. 무리마다 전열·딜러·원거리·지원이 섞이도록 무거운 순으로 돌려 담는다. */
 function planWave() {
-  const rows = G.endless ? makeEndlessWave(G.wIdx) : WAVES[curWave()];
+  let rows = G.endless ? makeEndlessWave(G.wIdx) : WAVES[curWave()];
+  /* 5·10·15관문 마지막 웨이브에는 네임드 용사가 하나 끼어든다 */
+  if (G.named && G.wIdx === waveCount() - 1) rows = rows.concat([[G.named, 1, 2.4, 'named']]);
   const rnd = rng32(G.endless ? (Math.random() * 1e9) | 0 : G.stage * 131 + G.wIdx * 17 + 7);
   const list = [];
   for (const row of rows) for (let k = 0; k < row[1]; k++) list.push({ type:row[0], af:row[3] || null });
@@ -1194,8 +1325,8 @@ function place(key) {
   if (G.rooms[G.sel]) { say('이미 사용 중인 방이에요'); return; }
   if (!G.hand[key]) { say('이 카드는 이미 배치했어요'); return; }
   const def = DEF[key]; G.hand[key]--;
-  const s = ROOMS[G.sel], m = lvMult(SAVE.own[key] || 1), hp = (def.hp || 1) * m;
-  G.rooms[G.sel] = { key, def, hp, maxHp:hp, dmg:(def.dmg || 0) * m, road:s.road, spent:false, markT:0, cd:0, x:s.x, z:s.z, hx:s.x, hz:s.z, d:s.d, homeD:s.d, yaw:0, atk:0, hitT:0, bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 };
+  const s = ROOMS[G.sel], m = statMul(key), hp = (def.hp || 1) * m.hp;
+  G.rooms[G.sel] = { key, def, hp, maxHp:hp, dmg:(def.dmg || 0) * m.dmg, road:s.road, spent:false, markT:0, cd:0, x:s.x, z:s.z, hx:s.x, hz:s.z, d:s.d, homeD:s.d, yaw:0, atk:0, hitT:0, bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 };
   burst(s.x, 10, s.z, 10, '#c9b8ff', 40); G.sel = -1; SFX.place();
 }
 function pickUp() {
@@ -1533,7 +1664,10 @@ function update(dt) {
     G.rooms[i] = null; SFX.die(); hitstop(0.05);
   }
   for (const h of G.heroes) if (h.hp <= 0) {
-    G.gems += h.def.rew; sev('gem', null, h, h.def.rew); fxText(h.x, h.z, '+' + h.def.rew, '#8be9ff'); burst(h.x, 16, h.z, 10, '#8be9ff', 60);
+    const rew = Math.round(h.def.rew * (1 + dexBonus().heroGem));
+    G.gems += rew; sev('gem', null, h, rew); fxText(h.x, h.z, '+' + rew, '#8be9ff'); burst(h.x, 16, h.z, 10, '#8be9ff', 60);
+    questAdd('kill');
+    if (!SAVE.heroDex[h.type] && CODEX.hero.keys.indexOf(h.type) >= 0) { SAVE.heroDex[h.type] = 1; persist(); say('용사 도감 등록: ' + h.def.name); }
     G.corpses.push({ key:h.type, def:h.def, x:h.x, z:h.z, yaw:h.yaw, t:1, dir:Math.random() < 0.5 ? -1 : 1 });
     SFX.die(); hitstop(h.def.tier === 'hero' ? 0.09 : 0.04); if (h.def.tier === 'hero') punch(34);
   }
@@ -1566,8 +1700,8 @@ function update(dt) {
 /* 네이티브(안드로이드 WebView)가 window.AndroidAds를 주입하면 진짜 광고를 띄우고,
    브라우저에서는 같은 흐름을 그대로 흉내 내는 모의 광고를 보여 준다.
    덕분에 앱으로 싸기 전에도 광고 동선을 그대로 테스트할 수 있다. */
-const AD_DAILY_MAX = 5, AD_DAILY_GEMS = 150, AD_PULL_MAX = 3;
-const ADV = { on:false, t:0, dur:5, label:'', cb:null, done:false, kind:'reward' };
+/* 광고 보상 횟수·양은 data/currency.js */
+const ADV ={ on:false, t:0, dur:5, label:'', cb:null, done:false, kind:'reward' };
 const ADS = (() => {
   function nat() {
     const a = window.AndroidAds;
@@ -1581,6 +1715,7 @@ const ADS = (() => {
   return {
     hasNative() { return !!nat(); },
     rewarded(label, cb) {
+      const cb0 = cb; cb = ok => { if (ok) { questAdd('ad'); persist(); } cb0(ok); };   /* 일일 퀘스트: 광고 시청 */
       const n = nat();
       if (n) { ADV.cb = cb; ADV.on = false; try { n.showRewarded(); } catch (e) { ADV.cb = null; cb(false); } return; }
       ADV.on = true; ADV.t = 0; ADV.dur = 5; ADV.label = label; ADV.cb = cb; ADV.done = false; ADV.kind = 'reward';
@@ -1594,7 +1729,7 @@ const ADS = (() => {
 })();
 function todayKey() { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); }
 function adLeftToday() {
-  if (SAVE.adDay !== todayKey()) { SAVE.adDay = todayKey(); SAVE.adCount = 0; SAVE.adPullCount = 0; persist(); }
+  if (SAVE.adDay !== todayKey()) { SAVE.adDay = todayKey(); SAVE.adCount = 0; SAVE.adPullCount = 0; SAVE.adSoulCount = 0; persist(); }
   return AD_DAILY_MAX - (SAVE.adCount || 0);
 }
 /* 게임 속도: ×1, ×1.2는 무료, ×2는 광고를 보면 이번 관문 동안 열린다 */
@@ -1627,13 +1762,21 @@ function adShield() {
   });
 }
 function claimDailyAd() {
-  if (adLeftToday() <= 0) { L.msg = '오늘 받을 수 있는 광고 보상을 다 받았어요'; return; }
+  if (adLeftToday() <= 0) { toast('오늘 받을 수 있는 광고 보상을 다 받았어요'); return; }
   ADS.rewarded('수정 ' + AD_DAILY_GEMS + '개', ok => {
     if (!ok) return;
     SAVE.adCount = (SAVE.adCount || 0) + 1;
     SAVE.gems += AD_DAILY_GEMS; persist();
-    L.msg = '수정 ' + AD_DAILY_GEMS + '개를 받았어요';
+    toast('수정 ' + AD_DAILY_GEMS + '개를 받았어요');
     SFX.reveal('R');
+  });
+}
+function adSoulLeft() { adLeftToday(); return AD_SOUL.max - (SAVE.adSoulCount || 0); }
+function claimAdSoul() {
+  if (adSoulLeft() <= 0) { toast('오늘 ' + CUR.soul.name + ' 광고를 다 봤어요'); return; }
+  ADS.rewarded(CUR.soul.name + ' ' + AD_SOUL.amt + '개', ok => {
+    if (!ok) return;
+    SAVE.adSoulCount = (SAVE.adSoulCount || 0) + 1; grant({ soul:AD_SOUL.amt }, 1);
   });
 }
 function doubleReward() {
@@ -1771,25 +1914,104 @@ function thumb(key) {
   const cc = c.getContext('2d'), d = DEF[key];
   const tc = { yaw:0.62, pitch:0.34, dist:150, tx:0, ty:16, tz:0 };
   beginScene(cc, tc, 56, 64, 190);
-  if (d.kind === 'minion') drawModel(modelOf(key, d.art), 0, 0, 0, 36, 0.45);
-  else drawModel(TRAPM[key](), 0, 0, 0, 46, 0.45);
+  if (d.kind === 'trap') drawModel(TRAPM[key](), 0, 0, 0, 46, 0.45);
+  else drawModel(modelOf(key, d.art), 0, 0, 0, 36, 0.45);   /* 부하·용사 */
   endScene();
   THUMB[key] = c; return c;
 }
 
-/* ================= 로비 ================= */
-function drawLobby() {
-  BTN = [];
+/* ================= 메뉴 공통 (상단 바 · 하단 탭 · 팝업) ================= */
+const NAV_Y = H - 54;
+const NAV = [['shop', '🛒', '상점'], ['lobby', '🃏', '덱'], ['stages', '⚔️', '전투'], ['codex', '📖', '도감'], ['pvp', '🏆', '경쟁전']];
+function pad2(n) { return (n < 10 ? '0' : '') + n; }
+/* 1시간 이상 남았으면 시:분, 아니면 분:초 */
+function fmtT(ms) {
+  const s = Math.ceil(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+  return h ? pad2(h) + ':' + pad2(m) : pad2(m) + ':' + pad2(s % 60);
+}
+function rdot(x, y) {
+  ctx.fillStyle = '#ff3b4a'; ctx.beginPath(); ctx.arc(x, y, 4.5, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#120e1a'; ctx.lineWidth = 1.5; ctx.stroke();
+}
+function menuBg() {
   ctx.fillStyle = '#120e1a'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#171222';
   for (let y = 0; y < H; y += 22) for (let x = (y / 22 % 2) * 11; x < W; x += 22) ctx.fillRect(x, y, 21, 21);
+}
+/* 화면 제목 줄 (상단 바 바로 아래) + 소리 버튼 */
+function menuTitle(t) {
+  txt(t, 14, 43, 15, '#ffd9f0');
+  btn(W - 74, 33, 62, 20, SAVE.mute ? '소리 꺼짐' : '소리 켜짐', () => { SAVE.mute = !SAVE.mute; persist(); }, { bg:'#241d2e', fs:9, fc:SAVE.mute ? '#8a7aa5' : '#8be9ff' });
+}
+/* 보상 표시: ◆는 하늘색, 영혼석은 보라색 */
+function rewLabel(x, y, r, fs, align) {
+  const parts = [];
+  if (r.gems) parts.push([CUR.gem.ico + r.gems, CUR.gem.col]);
+  if (r.soul) parts.push([CUR.soul.ico + r.soul, CUR.soul.col]);
+  ctx.font = 'bold ' + fs + 'px sans-serif';
+  const ws = parts.map(p => ctx.measureText(p[0]).width), tw = ws.reduce((a, b) => a + b, 0) + (parts.length - 1) * 6;
+  let cx = align === 'center' ? x - tw / 2 : align === 'right' ? x - tw : x;
+  parts.forEach((p, i) => { txt(p[0], cx, y, fs, p[1]); cx += ws[i] + 6; });
+}
+/* 받기 버튼: ◆가 있으면 [받기][🎬 2배], 영혼석만이면 [받기]. x1 = 오른쪽 끝 */
+function claimBtns(x1, y, r, mark, h) {
+  h = h || 30;
+  if (r.gems) {
+    btn(x1 - 120, y, 56, h, '받기', () => claim(r, false, mark), { bg:'#2a4659', fs:11 });
+    btn(x1 - 60, y, 60, h, '🎬 2배', () => claim(r, true, mark), { bg:'#2b4a3a', fs:11, bc:'#6bdc7a' });
+  } else btn(x1 - 60, y, 60, h, '받기', () => claim(r, false, mark), { bg:'#3a2a59', fs:11, bc:CUR.soul.col });
+}
+function pill(x, y, w, ico, col, val, act, label) {
+  ctx.fillStyle = 'rgba(24,18,38,.96)'; rbox(x, y, w, 22, 11); ctx.fill();
+  ctx.strokeStyle = col; ctx.globalAlpha = 0.55; ctx.lineWidth = 1; rbox(x, y, w, 22, 11); ctx.stroke(); ctx.globalAlpha = 1;
+  txt(ico, x + 12, y + 11, 13, col, 'center');
+  txt(val, x + 24, y + 11, 12, '#fff');
+  if (act) BTN.push({ x, y, w, h:22, act, label });
+}
+function drawTopBar() {
+  ctx.fillStyle = '#0e0a16'; ctx.fillRect(0, 0, W, 30);
+  pill(6, 4, 104, CUR.gem.ico, CUR.gem.col, String(SAVE.gems));
+  pill(114, 4, 96, CUR.soul.ico, CUR.soul.col, String(SAVE.soul), () => { scene = 'shop'; }, '상단:영혼석');
+  const st = stamNow();
+  pill(214, 4, 140, CUR.stam.ico, CUR.stam.col, st + '/' + STAM.max, () => { M = { k:'stam' }; }, '상단:행동력');
+  if (st < STAM.max) txt(fmtT(stamNext()), 326, 15, 9, '#9a8ab5', 'right');
+  txt('+', 342, 15, 15, CUR.stam.col, 'center');
+}
+function drawNav() {
+  ctx.fillStyle = '#0c0812'; ctx.fillRect(0, NAV_Y, W, H - NAV_Y);
+  ctx.fillStyle = '#3a2f4d'; ctx.fillRect(0, NAV_Y, W, 1);
+  const w = W / NAV.length, dots = { stages:rewardAny(), codex:dexAnyClaim() };
+  NAV.forEach(([sc, ico, nm], i) => {
+    const x = i * w, on = scene === sc;
+    BTN.push({ x, y:NAV_Y, w, h:H - NAV_Y, act:() => { if (sc === 'stages' && scene !== 'stages') SS.init = false; scene = sc; }, label:'탭:' + nm });
+    if (on) { ctx.fillStyle = '#2a2140'; rbox(x + 4, NAV_Y + 5, w - 8, H - NAV_Y - 10, 10); ctx.fill(); }
+    ctx.globalAlpha = on ? 1 : 0.55;
+    txt(ico, x + w / 2, NAV_Y + 20, 18, '#fff', 'center');
+    txt(nm, x + w / 2, NAV_Y + 40, 10, on ? '#ffd35a' : '#c9b8ff', 'center');
+    ctx.globalAlpha = 1;
+    if (dots[sc]) rdot(x + w / 2 + 14, NAV_Y + 10);
+  });
+}
+function drawToast() {
+  if (TOAST.t <= 0) return;
+  ctx.globalAlpha = Math.min(1, TOAST.t * 3);
+  ctx.font = 'bold 12px sans-serif';
+  const tw = Math.min(W - 24, ctx.measureText(TOAST.msg).width + 28);
+  ctx.fillStyle = 'rgba(10,6,18,.94)'; rbox(W / 2 - tw / 2, NAV_Y - 40, tw, 28, 14); ctx.fill();
+  ctx.strokeStyle = '#ffd35a'; ctx.lineWidth = 1; rbox(W / 2 - tw / 2, NAV_Y - 40, tw, 28, 14); ctx.stroke();
+  txt(TOAST.msg, W / 2, NAV_Y - 26, 12, '#ffe9a8', 'center');
+  ctx.globalAlpha = 1;
+}
+function drawMenu() {
+  ({ lobby:drawLobby, stages:drawStages, shop:drawShop, codex:drawCodex, pvp:drawPvp })[scene]();
+  drawTopBar(); drawNav(); drawPullResult(); drawModal(); drawToast();
+}
 
-  const li = unitImg('__lord');
-  if (li) fitImg(ctx, li, 30, 50, 46, 46);
-  txt('마왕의 던전', li ? 58 : 14, 24, 19, '#ffd9f0');
-  txt('돌파한 관문 ' + SAVE.cleared + '/' + STAGES.length, li ? 58 : 14, 42, 10, '#8a7aa5');
-  txt('◆ ' + SAVE.gems, W - 12, 20, 15, '#8be9ff', 'right');
-  btn(W - 74, 32, 62, 20, SAVE.mute ? '소리 꺼짐' : '소리 켜짐', () => { SAVE.mute = !SAVE.mute; persist(); }, { bg:'#241d2e', fs:9, fc:SAVE.mute ? '#8a7aa5' : '#8be9ff' });
+/* ================= 덱 (편성 · 소환 · 강화) ================= */
+function drawLobby() {
+  BTN = [];
+  menuBg();
+  menuTitle('덱 편성');
 
   const isM = L.tab === 'minion';
   btn(12, 56, 164, 28, '부하  ' + SAVE.mteam.length + '/' + mSlots(), () => { L.tab = 'minion'; L.info = null; }, { on:isM, bg:isM ? '#4a3a63' : '#1e1829', fs:12 });
@@ -1799,10 +2021,14 @@ function drawLobby() {
   const cw = 84, chh = 80, cg = 5, cx0 = (W - (cw * 4 + cg * 3)) / 2, cy0 = 90;
   pool.forEach((k, i) => {
     const d = DEF[k], x = cx0 + (i % 4) * (cw + cg), y = cy0 + Math.floor(i / 4) * (chh + cg);
-    const lv = SAVE.own[k], inT = team.indexOf(k) >= 0, col = RAR_COL[d.rar];
-    BTN.push({ x, y, w:cw, h:chh, act:() => { L.info = k; toggleTeam(k); }, label:'카드:' + k });
-    ctx.fillStyle = lv ? '#271f38' : '#1a1524'; rbox(x, y, cw, chh, 8); ctx.fill();
-    ctx.strokeStyle = inT ? '#ffd35a' : col; ctx.lineWidth = inT ? 3 : 1.5; rbox(x, y, cw, chh, 8); ctx.stroke();
+    const lv = SAVE.own[k], inT = team.indexOf(k) >= 0, col = RAR_COL[d.rar], sel = L.info === k;
+    /* 처음 누르면 고르기(강화 대상), 고른 카드를 한 번 더 누르면 편성/해제 */
+    BTN.push({ x, y, w:cw, h:chh, act:() => {
+      if (lv && !sel) { L.info = k; toast(inT ? '한 번 더 누르면 편성에서 빠져요' : '한 번 더 누르면 편성돼요'); }
+      else { L.info = k; toggleTeam(k); }
+    }, label:'카드:' + k });
+    ctx.fillStyle = lv ? (sel ? '#352a4c' : '#271f38') : '#1a1524'; rbox(x, y, cw, chh, 8); ctx.fill();
+    ctx.strokeStyle = inT ? '#ffd35a' : sel ? '#ffffff' : col; ctx.lineWidth = inT || sel ? 3 : 1.5; rbox(x, y, cw, chh, 8); ctx.stroke();
     ctx.fillStyle = col; rbox(x + 4, y + 4, 34, 13, 6); ctx.fill();
     txt(RAR_NAME[d.rar], x + 21, y + 11, 8, '#141018', 'center');
     if (inT) txt('편성', x - 5 + cw, y + 11, 9, '#ffd35a', 'right');
@@ -1812,19 +2038,20 @@ function drawLobby() {
     else ctx.drawImage(thumb(k), x + cw / 2 - 25, y + 8, 50, 50);
     ctx.globalAlpha = 1;
     if (lv) {
+      const e = enhLv(k);
       txt(d.name, x + cw / 2, y + 62, 10, '#fff', 'center');
-      txt('Lv.' + lv + (lv >= MAX_LV ? ' MAX' : ''), x + cw / 2, y + 73, 9, '#c9b8ff', 'center');
+      txt('Lv.' + lv + (lv >= MAX_LV ? ' MAX' : '') + (e > 1 ? '  +' + e : ''), x + cw / 2, y + 73, 9, e > 1 ? CUR.gem.col : '#c9b8ff', 'center');
     } else txt('미보유', x + cw / 2, y + 64, 10, '#6b5a85', 'center');
   });
 
   const iy = cy0 + 4 * (chh + cg) + 2;
   ctx.fillStyle = '#1a1524'; rbox(12, iy, W - 24, 32, 6); ctx.fill();
   if (L.info && SAVE.own[L.info]) {
-    const d = DEF[L.info], m = lvMult(SAVE.own[L.info]);
+    const d = DEF[L.info], m = statMul(L.info);
     txt(d.name + ' — ' + d.note, 20, iy + 11, 10, '#ffe9a8');
     txt(d.kind === 'minion'
-      ? '체력 ' + Math.round(d.hp * m) + ' · 공격 ' + Math.round(d.dmg * m) + ' · 사거리 ' + d.rng + ' · ' + d.cd + '초'
-      : '피해 ' + Math.round(d.dmg * m) + ' · 범위 ' + d.rng + (d.stun ? ' · 기절 ' + d.stun + '초' : '') + (d.slow ? ' · 둔화' : '') + (d.push ? ' · 밀어내기' : ''),
+      ? '체력 ' + Math.round(d.hp * m.hp) + ' · 공격 ' + Math.round(d.dmg * m.dmg) + ' · 사거리 ' + d.rng + ' · ' + d.cd + '초'
+      : '피해 ' + Math.round(d.dmg * m.dmg) + ' · 범위 ' + d.rng + (d.stun ? ' · 기절 ' + d.stun + '초' : '') + (d.slow ? ' · 둔화' : '') + (d.push ? ' · 밀어내기' : ''),
       20, iy + 23, 10, '#9aa0a6');
   } else txt(L.msg, W / 2, iy + 16, 11, '#ffe9a8', 'center');
 
@@ -1832,65 +2059,371 @@ function drawLobby() {
   const ni = nextSlotInfo(isM ? 'minion' : 'trap'), cap = isM ? mSlots() : tSlots();
   btn(12, sy, W - 24, 24, (isM ? '부하' : '함정') + ' 칸 ' + cap + (ni ? '  →  ' + ni.n + '칸 (' + ni.at + '관문 돌파 시)' : '  (최대)'), () => {}, { dis:true, fs:11 });
 
-  const gy = sy + 28, cat = L.tab, p = PULL[cat], nm = isM ? '부하' : '함정';
-  btn(12, gy, 165, 40, nm + ' 소환 ×1', () => doPull(cat, 1), { dis:SAVE.gems < p.one, bg:'#2a4659', fs:12, sub:'◆ ' + p.one, sc:'#8be9ff' });
-  btn(183, gy, 165, 40, nm + ' 소환 ×10', () => doPull(cat, 10), { dis:SAVE.gems < p.ten, bg:'#392b59', fs:12, sub:'◆ ' + p.ten + ' · 정예 이상 보장', sc:'#8be9ff' });
+  const gy = sy + 28, cat = L.tab, p = PULL_COST[cat], nm = isM ? '부하' : '함정';
+  btn(12, gy, 165, 40, nm + ' 소환 ×1', () => doPull(cat, 1), { dis:SAVE.soul < p.one, bg:'#33204a', fs:12, sub:CUR.soul.ico + ' ' + p.one, sc:CUR.soul.col });
+  btn(183, gy, 165, 40, nm + ' 소환 ×10', () => doPull(cat, 10), { dis:SAVE.soul < p.ten, bg:'#392b59', fs:12, sub:CUR.soul.ico + ' ' + p.ten + ' · 정예 이상 보장', sc:CUR.soul.col });
 
   const fy = gy + 44, pl = adPullLeft();
   btn(12, fy, W - 24, 32, '🎬 광고 보고 ' + nm + ' 무료 소환 ×1', () => adPull(cat), { dis:pl <= 0, bg:'#2b3f5a', fs:12,
       sub:pl > 0 ? '오늘 ' + pl + '회 남음' : '내일 다시 열려요', sc:pl > 0 ? '#9ac8ff' : '#6b5a85' });
-  const ty = fy + 36, left = adLeftToday();
-  btn(12, ty, 165, 44, '광고 보고 ◆' + AD_DAILY_GEMS, claimDailyAd, { dis:left <= 0, bg:'#2b4a3a', fs:12,
-      sub:left > 0 ? '오늘 ' + left + '회 남음' : '내일 다시 열려요', sc:left > 0 ? '#9ae8b5' : '#6b5a85' });
-  btn(183, ty, 165, 44, '출정하기', () => { goStages(); }, { bg:'#5d2f3f', on:true, fs:15,
-      sub:'관문 ' + SAVE.cleared + '/' + STAGES.length, sc:'#ffe9a8' });
-  txt('부하 65% · 정예 27% · 권속 7% · 마왕 1%   /   중복은 레벨 업 (최대 ' + MAX_LV + ')', W / 2, ty + 56, 9, '#8a7aa5', 'center');
 
-  if (L.result) {
-    ctx.fillStyle = 'rgba(8,5,14,.95)'; ctx.fillRect(0, 0, W, H);
-    txt('소환 결과', W / 2, 80, 22, '#ffd35a', 'center');
-    const n = L.result.length, pr = n > 5 ? 5 : n, cw2 = 64, ch2 = 100, g = 5;
-    const rows = Math.ceil(n / pr), gy2 = H / 2 - (rows * (ch2 + g)) / 2;
-    L.result.forEach((r, i) => {
-      const row = Math.floor(i / pr), inR = Math.min(pr, n - row * pr);
-      const gx = (W - (inR * cw2 + (inR - 1) * g)) / 2 + (i % pr) * (cw2 + g), y = gy2 + row * (ch2 + g);
-      const d = DEF[r.key], col = RAR_COL[d.rar];
-      ctx.fillStyle = '#271f38'; rbox(gx, y, cw2, ch2, 8); ctx.fill();
-      ctx.strokeStyle = col; ctx.lineWidth = RAR_RANK[d.rar] >= 2 ? 3 : 1.5; rbox(gx, y, cw2, ch2, 8); ctx.stroke();
-      txt(RAR_NAME[d.rar], gx + cw2 / 2, y + 11, 9, col, 'center');
-      const ri = unitImg(r.key);
-      if (ri) fitImg(ctx, ri, gx + cw2 / 2, y + 70, cw2 - 10, 52);
-      else ctx.drawImage(thumb(r.key), gx + cw2 / 2 - 29, y + 16, 58, 58);
-      txt(d.name, gx + cw2 / 2, y + 78, 9, '#fff', 'center');
-      txt(r.isNew ? 'NEW' : r.lvUp ? 'Lv.' + SAVE.own[r.key] : '◆+' + r.refund, gx + cw2 / 2, y + 92, 10, r.isNew ? '#ff7ad9' : '#8be9ff', 'center');
-    });
-    txt('화면을 누르면 닫혀요', W / 2, H - 70, 13, '#ddd', 'center');
+  /* 강화: 고른 카드를 ◆로 */
+  const ty = fy + 36, k = L.info && SAVE.own[L.info] ? L.info : null;
+  if (k) {
+    const e = enhLv(k), c = enhCost(e), mx = e >= ENH.max;
+    btn(12, ty, W - 24, 40, DEF[k].name + ' 강화 +' + e + (mx ? ' (최대)' : '  →  +' + (e + 1)), () => enhance(k), {
+      dis:mx || SAVE.gems < c, bg:'#1f3a4a', fs:13, bc:CUR.gem.col,
+      sub:mx ? '공격력·체력 +' + Math.round(ENH.per * 100 * (e - 1)) + '%' : CUR.gem.ico + ' ' + c + '   ·   공격력·체력 +' + Math.round(ENH.per * 100) + '%', sc:CUR.gem.col });
+  } else btn(12, ty, W - 24, 40, '카드를 골라 ' + CUR.gem.ico + '로 강화하세요', () => {}, { dis:true, fs:12, sub:'단계마다 공격력·체력 +' + Math.round(ENH.per * 100) + '% (최대 +' + ENH.max + ')' });
+  txt('부하 65% · 정예 27% · 권속 7% · 마왕 1%   /   중복은 레벨 업 (최대 ' + MAX_LV + ')', W / 2, ty + 50, 9, '#8a7aa5', 'center');
+}
+function drawPullResult() {
+  if (!L.result) return;
+  ctx.fillStyle = 'rgba(8,5,14,.95)'; ctx.fillRect(0, 0, W, H);
+  txt('소환 결과', W / 2, 80, 22, '#ffd35a', 'center');
+  const n = L.result.length, pr = n > 5 ? 5 : n, cw2 = 64, ch2 = 100, g = 5;
+  const rows = Math.ceil(n / pr), gy2 = H / 2 - (rows * (ch2 + g)) / 2;
+  L.result.forEach((r, i) => {
+    const row = Math.floor(i / pr), inR = Math.min(pr, n - row * pr);
+    const gx = (W - (inR * cw2 + (inR - 1) * g)) / 2 + (i % pr) * (cw2 + g), y = gy2 + row * (ch2 + g);
+    const d = DEF[r.key], col = RAR_COL[d.rar];
+    ctx.fillStyle = '#271f38'; rbox(gx, y, cw2, ch2, 8); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = RAR_RANK[d.rar] >= 2 ? 3 : 1.5; rbox(gx, y, cw2, ch2, 8); ctx.stroke();
+    txt(RAR_NAME[d.rar], gx + cw2 / 2, y + 11, 9, col, 'center');
+    const ri = unitImg(r.key);
+    if (ri) fitImg(ctx, ri, gx + cw2 / 2, y + 70, cw2 - 10, 52);
+    else ctx.drawImage(thumb(r.key), gx + cw2 / 2 - 29, y + 16, 58, 58);
+    txt(d.name, gx + cw2 / 2, y + 78, 9, '#fff', 'center');
+    txt(r.isNew ? 'NEW' : r.lvUp ? 'Lv.' + SAVE.own[r.key] : '◆+' + r.refund, gx + cw2 / 2, y + 92, 10, r.isNew ? '#ff7ad9' : '#8be9ff', 'center');
+  });
+  if (L.result.some(r => r.isNew)) txt('NEW 카드가 도감에 등록됐어요', W / 2, H - 100, 12, '#ff7ad9', 'center');
+  txt('화면을 누르면 닫혀요', W / 2, H - 70, 13, '#ddd', 'center');
+}
+
+/* ================= 상점 ================= */
+function drawShop() {
+  BTN = [];
+  menuBg();
+  menuTitle('상점');
+  const sec = (y, t) => { txt(t, 14, y, 12, '#c9b8ff'); ctx.fillStyle = '#3a2f4d'; ctx.fillRect(14, y + 9, W - 28, 1); };
+  sec(70, '광고 보상');
+  const left = adLeftToday(), sl = adSoulLeft();
+  btn(12, 84, 165, 56, '🎬 광고 보고 ' + CUR.gem.ico + AD_DAILY_GEMS, claimDailyAd, { dis:left <= 0, bg:'#1f3a4a', bc:CUR.gem.col, fs:13, fc:CUR.gem.col,
+      sub:left > 0 ? '오늘 ' + left + '/' + AD_DAILY_MAX + '회 남음' : '내일 다시 열려요', sc:'#c9b8ff' });
+  btn(183, 84, 165, 56, '🎬 광고 보고 ' + CUR.soul.ico + AD_SOUL.amt, claimAdSoul, { dis:sl <= 0, bg:'#33204a', bc:CUR.soul.col, fs:13, fc:CUR.soul.col,
+      sub:sl > 0 ? '오늘 ' + sl + '/' + AD_SOUL.max + '회 남음' : '내일 다시 열려요', sc:'#c9b8ff' });
+
+  sec(162, '부하 소환');
+  const p = PULL_COST.minion;
+  btn(12, 176, 165, 56, '부하 소환 ×1', () => doPull('minion', 1), { dis:SAVE.soul < p.one, bg:'#33204a', bc:CUR.soul.col, fs:13, sub:CUR.soul.ico + ' ' + p.one, sc:CUR.soul.col });
+  btn(183, 176, 165, 56, '부하 소환 ×10', () => doPull('minion', 10), { dis:SAVE.soul < p.ten, bg:'#392b59', bc:CUR.soul.col, fs:13, sub:CUR.soul.ico + ' ' + p.ten + ' · 정예 이상 보장', sc:CUR.soul.col });
+  btn(12, 238, W - 24, 26, '함정 소환과 무료 소환은 덱 탭에서 할 수 있어요  →', () => { scene = 'lobby'; }, { bg:'#1e1829', fs:10, fc:'#9a8ab5' });
+
+  sec(286, '행동력');
+  const st = stamNow();
+  btn(12, 300, W - 24, 56, CUR.stam.ico + ' 행동력 +' + STAM.buyAmt + ' 충전', () => { M = { k:'stam' }; }, { dis:SAVE.soul < STAM.buySoul, bg:'#3a3220', bc:CUR.stam.col, fs:14,
+      sub:CUR.soul.ico + ' ' + STAM.buySoul + '   ·   지금 ' + st + '/' + STAM.max + '   ·   ' + STAM.regenMin + '분마다 1 회복', sc:CUR.soul.col });
+
+  sec(378, '화폐 안내');
+  txt(CUR.gem.ico, 22, 404, 15, CUR.gem.col, 'center');
+  txt('수정 — 유닛 강화에 써요', 36, 398, 11, '#fff');
+  txt('관문 돌파 · 용사 처치 · 접속상자 · 퀘스트로 모아요', 36, 413, 10, '#9a8ab5');
+  txt(CUR.soul.ico, 22, 442, 15, CUR.soul.col, 'center');
+  txt('영혼석 — 소환과 행동력 충전에 써요', 36, 436, 11, '#fff');
+  txt('광고 · 퀘스트 완료 · 출석 · 관문 보상 · 도감으로 모아요', 36, 451, 10, '#9a8ab5');
+  txt(CUR.stam.ico, 22, 480, 14, CUR.stam.col, 'center');
+  txt('행동력 — 관문 출정마다 ' + STAM.cost + ' 소모', 36, 474, 11, '#fff');
+  txt('앱을 꺼 둬도 ' + STAM.regenMin + '분마다 1씩 차요 (최대 ' + STAM.max + ')', 36, 489, 10, '#9a8ab5');
+}
+
+/* ================= 도감 ================= */
+function drawCodex() {
+  BTN = [];
+  menuBg();
+  menuTitle('도감');
+  const tabs = Object.keys(CODEX), tw = (W - 24 - 8) / tabs.length;
+  tabs.forEach((t, i) => {
+    const on = L.dex === t, x = 12 + i * (tw + 4);
+    btn(x, 56, tw, 28, CODEX[t].name, () => { L.dex = t; }, { on, bg:on ? '#4a3a63' : '#1e1829', fs:12 });
+    if (dexTabCan(t)) rdot(x + tw - 8, 60);
+  });
+  const tab = L.dex, C = CODEX[tab], N = C.keys.length, n = dexFound(tab), pct = Math.floor(n / N * 100);
+  txt(C.name + ' 도감', 14, 98, 12, '#ffe9a8');
+  txt(n + '/' + N + '  (' + pct + '%)', W - 14, 98, 12, '#ffd35a', 'right');
+  bar2(14, 107, W - 28, 5, n / N, '#ffd35a');
+
+  const cw = 80, ch = 74, g = 6, x0 = (W - (cw * 4 + g * 3)) / 2, y0 = 118;
+  C.keys.forEach((k, i) => {
+    const d = DEF[k], x = x0 + (i % 4) * (cw + g), y = y0 + Math.floor(i / 4) * (ch + g), has = dexHas(tab, k);
+    const col = tab === 'hero' ? TIER_COL[d.tier] : RAR_COL[d.rar];
+    ctx.fillStyle = has ? '#271f38' : '#15111e'; rbox(x, y, cw, ch, 8); ctx.fill();
+    ctx.strokeStyle = has ? col : '#2e2640'; ctx.lineWidth = has ? 1.5 : 1; rbox(x, y, cw, ch, 8); ctx.stroke();
+    if (tab !== 'hero') { ctx.globalAlpha = has ? 1 : 0.4; ctx.fillStyle = col; rbox(x + 4, y + 4, 30, 12, 6); ctx.fill(); txt(RAR_NAME[d.rar], x + 19, y + 10, 8, '#141018', 'center'); ctx.globalAlpha = 1; }
+    const im = unitImg(k);
+    if (has) {
+      if (im) fitImg(ctx, im, x + cw / 2, y + 54, cw - 16, 40);
+      else ctx.drawImage(thumb(k), x + cw / 2 - 22, y + 12, 44, 44);
+      txt(d.name, x + cw / 2, y + 64, 10, '#fff', 'center');
+    } else {
+      /* 미발견: 검은 실루엣 */
+      ctx.globalAlpha = 0.85;
+      const sil = im && whiteOf(im, '#05030a');
+      if (sil) fitImg(ctx, sil, x + cw / 2, y + 54, cw - 16, 40);
+      else { ctx.globalAlpha = 0.12; ctx.drawImage(thumb(k), x + cw / 2 - 22, y + 12, 44, 44); }
+      ctx.globalAlpha = 1;
+      txt('미발견', x + cw / 2, y + 64, 10, '#6b5a85', 'center');
+    }
+  });
+
+  /* 달성 보너스 */
+  const by = y0 + 4 * (ch + g) + 4;
+  txt('달성 보너스', 14, by, 12, '#c9b8ff');
+  C.tiers.forEach((t, j) => {
+    const y = by + 10 + j * 34, got = SAVE.dexGot[tab + j], can = dexCanClaim(tab, j);
+    ctx.fillStyle = got ? '#1c2a22' : can ? '#2c2340' : '#1a1524'; rbox(12, y, W - 24, 30, 6); ctx.fill();
+    if (can) { ctx.strokeStyle = '#ffd35a'; ctx.lineWidth = 1.5; rbox(12, y, W - 24, 30, 6); ctx.stroke(); }
+    txt(Math.round(t.at * 100) + '%', 22, y + 15, 12, got ? '#6bdc7a' : can ? '#ffd35a' : '#6b5a85');
+    txt(t.desc, 62, y + 15, 11, got || can ? '#fff' : '#8a7aa5');
+    rewLabel(W - 84, y + 15, { soul:t.soul }, 11, 'right');
+    if (got) txt('받음', W - 24, y + 15, 11, '#6bdc7a', 'right');
+    else if (can) { btn(W - 76, y + 3, 58, 24, '수령', () => dexClaim(tab, j), { bg:'#3a2a59', bc:'#ffd35a', fs:11 }); rdot(W - 20, y + 4); }
+    else txt(Math.ceil(t.at * N - 1e-9) + '종', W - 24, y + 15, 10, '#6b5a85', 'right');
+  });
+  const cur = C.tiers.filter((t, j) => SAVE.dexGot[tab + j]).map(t => t.desc), nx = C.tiers.find((t, j) => !SAVE.dexGot[tab + j]);
+  const ty = by + 10 + C.tiers.length * 34 + 8;
+  txt('현재: ' + (cur.length ? cur.join(' · ') : '없음'), 14, ty, 9, '#9ae8b5');
+  txt('다음: ' + (nx ? nx.desc + ' (' + Math.ceil(nx.at * N - 1e-9) + '종 모으면)' : '모두 달성!'), 14, ty + 14, 9, '#ffe9a8');
+}
+
+/* ================= 경쟁전 (준비중) ================= */
+function drawPvp() {
+  BTN = [];
+  menuBg();
+  menuTitle('경쟁전');
+  txt('🏆', W / 2, 240, 64, '#fff', 'center');
+  txt('준비중입니다', W / 2, 320, 20, '#ffd35a', 'center');
+  txt('곧 열려요', W / 2, 350, 14, '#c9b8ff', 'center');
+  txt('다른 마왕의 던전과 겨루는 랭킹전이 들어올 자리예요', W / 2, 390, 10, '#8a7aa5', 'center');
+}
+
+/* ================= 팝업 ================= */
+function panel(x, y, w, h, title) {
+  ctx.fillStyle = 'rgba(4,3,8,.75)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#1a1426'; rbox(x, y, w, h, 12); ctx.fill();
+  ctx.strokeStyle = '#6a5a8a'; ctx.lineWidth = 1.5; rbox(x, y, w, h, 12); ctx.stroke();
+  txt(title, x + w / 2, y + 22, 15, '#ffd35a', 'center');
+  btn(x + w - 34, y + 8, 26, 26, '✕', () => { M = null; }, { bg:'#2a2140', fs:13 });
+}
+function drawModal() {
+  if (!M) return;
+  BTN = [];   /* 아래 화면 버튼은 막는다 */
+  ({ stage:mStage, stam:mStam, quest:mQuest, att:mAtt, box:mBox, mail:mMail, clear:mClear })[M.k](M);
+  BTN.push({ x:0, y:0, w:W, h:H, act:() => {}, label:'팝업 바깥' });
+}
+/* 관문에 나오는 용사 중 강한 순으로 3종 (보스 제외) */
+function stageFoes(i) {
+  const S = STAGES[i], seen = {};
+  for (let w = S.from; w <= S.to; w++) for (const r of WAVES[w]) if (!DEF[r[0]].boss) seen[r[0]] = 1;
+  return Object.keys(seen).sort((a, b) => DEF[b].hp - DEF[a].hp).slice(0, 3);
+}
+function mStage(m) {
+  const i = m.i, end = i === ENDLESS, S = end ? null : STAGES[i];
+  panel(20, 96, W - 40, 470, end ? '∞  무한의 문' : '제' + S.no + '관문 · ' + S.name);
+  txt(end ? '끝없이 밀려오는 침입자를 몇 웨이브까지 막는지 겨뤄요' : '웨이브 ' + (S.to - S.from + 1) + ' · 수호석 ' + Math.round(S.stone * (1 + dexBonus().lordHp)),
+      W / 2, 136, 10, '#9a8ab5', 'center');
+  /* 적 미리보기 */
+  txt('등장하는 용사', 36, 164, 12, '#c9b8ff');
+  const foes = end ? ['trainee', 'lancer', 'champion'] : stageFoes(i);
+  foes.forEach((t, j) => {
+    const cx = W / 2 + (j - 1) * 96, cy = 210, d = DEF[t];
+    ctx.fillStyle = '#271f38'; ctx.beginPath(); ctx.arc(cx, cy, 30, 0, 7); ctx.fill();
+    ctx.strokeStyle = TIER_COL[d.tier]; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, 30, 0, 7); ctx.stroke();
+    const im = unitImg(t);
+    if (im) fitImg(ctx, im, cx, cy + 26, 50, 52); else txt(d.ico, cx, cy, 26, '#fff', 'center');
+    txt(d.name, cx, cy + 44, 10, '#fff', 'center');
+  });
+  let y = 272;
+  if (S && S.boss) { txt('👑 보스  ' + DEF[S.boss].name, W / 2, y, 12, '#ffb27a', 'center'); y += 22; }
+  if (!end && NAMED_POOL[i]) {
+    ctx.fillStyle = 'rgba(255,122,217,.14)'; rbox(44, y - 11, W - 88, 22, 11); ctx.fill();
+    ctx.strokeStyle = NAMED_AFFIX.col; ctx.lineWidth = 1; rbox(44, y - 11, W - 88, 22, 11); ctx.stroke();
+    txt('⚠ 네임드 용사 등장! (처치하면 도감 등록)', W / 2, y, 11, NAMED_AFFIX.col, 'center'); y += 26;
   }
+  /* 별 도전 보상 */
+  if (!end) {
+    const got = starsOf(i), claimed = SAVE.clr.s[i] || 0;
+    txt('별 도전 보상', 36, 338, 12, '#c9b8ff');
+    txt('★'.repeat(got) + '☆'.repeat(3 - got), W - 36, 338, 14, '#ffd35a', 'right');
+    for (let s = 0; s < 3; s++) {
+      const bx = 36 + s * ((W - 72 - 12) / 3 + 6), bw = (W - 72 - 12) / 3, ok = got > s;
+      ctx.fillStyle = ok ? '#2a3a26' : '#211a2e'; rbox(bx, 350, bw, 92, 8); ctx.fill();
+      ctx.strokeStyle = ok ? '#6bdc7a' : '#3a2f4d'; ctx.lineWidth = 1.2; rbox(bx, 350, bw, 92, 8); ctx.stroke();
+      txt('★' + (s + 1), bx + bw / 2, 364, 11, ok ? '#ffd35a' : '#8a7aa5', 'center');
+      txt(ok && claimed > s ? '📦' : '🎁', bx + bw / 2, 390, 24, '#fff', 'center');
+      rewLabel(bx + bw / 2, 414, { gems:CLEAR_REWARD.stars[s] }, 11, 'center');
+      txt(CLEAR_REWARD.starName[s], bx + bw / 2, 430, 9, ok ? '#9ae8b5' : '#8a7aa5', 'center');
+    }
+    txt('받은 별 보상은 전투 탭 위 🏁 클리어보상에서 받아요', W / 2, 456, 9, '#8a7aa5', 'center');
+  }
+  const st = stamNow(), lack = st < STAM.cost;
+  btn(48, 480, W - 96, 60, '출정하기', () => startBattle(i), { bg:'#5d2f3f', on:true, fs:17,
+      sub:CUR.stam.ico + ' ' + STAM.cost + ' 소모   (보유 ' + st + ')', sc:lack ? '#ff8a8a' : CUR.stam.col });
+}
+function mStam(m) {
+  panel(36, 210, W - 72, 250, '행동력 충전');
+  const st = stamNow();
+  txt(st < STAM.cost ? '행동력이 부족해요' : '지금 행동력 ' + st + '/' + STAM.max, W / 2, 262, 13, st < STAM.cost ? '#ff8a8a' : '#fff', 'center');
+  txt('충전하시겠어요?', W / 2, 288, 15, '#fff', 'center');
+  txt(CUR.soul.ico + ' ' + STAM.buySoul, W / 2 - 40, 324, 18, CUR.soul.col, 'center');
+  txt('→', W / 2, 324, 16, '#9a8ab5', 'center');
+  txt(CUR.stam.ico + ' +' + STAM.buyAmt, W / 2 + 44, 324, 18, CUR.stam.col, 'center');
+  const can = SAVE.soul >= STAM.buySoul;
+  txt(can ? '보유 ' + CUR.soul.ico + SAVE.soul : CUR.soul.name + '이 부족해요 (보유 ' + SAVE.soul + ')', W / 2, 352, 10, can ? '#9a8ab5' : '#ff8a8a', 'center');
+  btn(56, 376, 118, 46, '충전', () => {
+    if (!buyStam()) return;
+    const t = m.then; M = null;
+    if (t !== undefined) startBattle(t);
+  }, { dis:!can, bg:'#3a3220', bc:CUR.stam.col, fs:14 });
+  btn(W - 174, 376, 118, 46, can ? '취소' : '상점 가기', () => { M = null; if (!can) scene = 'shop'; }, { bg:'#2a2140', fs:13 });
+}
+function mQuest() {
+  panel(14, 70, W - 28, 520, '일일 퀘스트');
+  txt('매일 자정에 초기화돼요', W / 2, 106, 10, '#9a8ab5', 'center');
+  const q = dq();
+  DAILY_QUESTS.forEach((Q, j) => {
+    const y = 122 + j * 70, p = Math.min(Q.need, q.prog[Q.id] || 0), done = p >= Q.need, got = !!q.got[Q.id];
+    ctx.fillStyle = got ? '#1c2a22' : done ? '#2c2340' : '#211a2e'; rbox(26, y, W - 52, 62, 8); ctx.fill();
+    txt(Q.name, 38, y + 16, 13, got ? '#9ae8b5' : '#fff');
+    bar2(38, y + 32, 130, 6, p / Q.need, done ? '#6bdc7a' : '#ffd35a');
+    txt(p + '/' + Q.need, 176, y + 35, 10, '#c9b8ff');
+    rewLabel(38, y + 50, Q.reward, 11);
+    if (got) txt('완료 ✓', W - 38, y + 31, 12, '#6bdc7a', 'right');
+    else if (done) claimBtns(W - 36, y + 16, Q.reward, () => { dq().got[Q.id] = true; });
+    else txt('진행 중', W - 38, y + 31, 11, '#6b5a85', 'right');
+  });
+  const y = 122 + DAILY_QUESTS.length * 70 + 4, all = DAILY_QUESTS.every(questDone);
+  ctx.fillStyle = q.all ? '#1c2a22' : all ? '#3a2a1e' : '#211a2e'; rbox(26, y, W - 52, 56, 8); ctx.fill();
+  ctx.strokeStyle = '#ffd35a'; ctx.lineWidth = all && !q.all ? 2 : 0.8; rbox(26, y, W - 52, 56, 8); ctx.stroke();
+  txt('전체 완료 보너스', 38, y + 18, 13, '#ffd35a');
+  rewLabel(38, y + 39, DAILY_ALL, 12);
+  if (q.all) txt('완료 ✓', W - 38, y + 28, 12, '#6bdc7a', 'right');
+  else if (all) claimBtns(W - 36, y + 13, DAILY_ALL, () => { dq().all = true; });
+  else txt(DAILY_QUESTS.filter(questDone).length + '/' + DAILY_QUESTS.length, W - 38, y + 28, 11, '#6b5a85', 'right');
+}
+function mAtt() {
+  panel(14, 110, W - 28, 420, '출석 보상');
+  txt('하루 한 번 · 연속이 아니어도 괜찮아요 · 7일차 다음은 1일차', W / 2, 146, 10, '#9a8ab5', 'center');
+  const n = SAVE.att.n, can = attCan();
+  ATTEND.forEach((r, j) => {
+    /* 1~6일차는 세 칸씩 두 줄, 7일차는 한 줄 통째로 */
+    const last = j === ATTEND.length - 1, cw = last ? W - 64 : (W - 64 - 2 * 6) / 3;
+    const x = last ? 32 : 32 + (j % 3) * (cw + 6), y = 162 + Math.floor(j / 3) * 96, h = last ? 76 : 88;
+    const got = j < n, today = j === n && can;
+    ctx.fillStyle = got ? '#1c2a22' : today ? '#3a2a1e' : '#211a2e'; rbox(x, y, cw, h, 8); ctx.fill();
+    ctx.strokeStyle = today ? '#ffd35a' : got ? '#4e8a66' : '#3a2f4d'; ctx.lineWidth = today ? 2.5 : 1; rbox(x, y, cw, h, 8); ctx.stroke();
+    txt((j + 1) + '일차', x + cw / 2, y + 14, 11, today ? '#ffd35a' : '#c9b8ff', 'center');
+    txt(got ? '✓' : r.soul ? '💜' : '💎', x + cw / 2, y + (last ? 38 : 40), last ? 22 : 20, got ? '#6bdc7a' : '#fff', 'center');
+    rewLabel(x + cw / 2, y + h - 14, r, last ? 13 : 10, 'center');
+  });
+  if (can) {
+    txt((n + 1) + '일차 보상', 32, 462, 13, '#ffd35a');
+    claimBtns(W - 32, 447, ATTEND[n], () => { SAVE.att.n = (n + 1) % ATTEND.length; SAVE.att.day = todayKey(); });
+  } else txt('오늘 출석 완료! 내일 또 만나요', W / 2, 462, 13, '#6bdc7a', 'center');
+}
+function mBox() {
+  panel(36, 180, W - 72, 300, '접속 상자');
+  const left = boxLeft();
+  txt(BOX.hours + '시간마다 하나씩 열려요 (앱을 꺼도 시간은 흘러요)', W / 2, 216, 10, '#9a8ab5', 'center');
+  txt('🎁', W / 2, 286, 64, '#fff', 'center');
+  rewLabel(W / 2, 344, BOX.reward, 15, 'center');
+  if (left <= 0) {
+    txt('광고를 보면 ' + CUR.gem.ico + (BOX.reward.gems * 2), W / 2, 368, 10, '#9ae8b5', 'center');
+    claimBtns(W / 2 + 60, 392, BOX.reward, () => { SAVE.boxT = Date.now(); }, 40);
+  } else {
+    txt('다음 상자까지', W / 2, 380, 11, '#c9b8ff', 'center');
+    txt(fmtT(left), W / 2, 410, 22, '#ffd35a', 'center');
+  }
+}
+function mMail() {
+  panel(14, 110, W - 28, 420, '우편함');
+  MAIL.forEach((ml, j) => {
+    const y = 150 + j * 76, got = !!SAVE.mailGot[ml.id];
+    ctx.fillStyle = got ? '#1a1524' : '#2c2340'; rbox(26, y, W - 52, 68, 8); ctx.fill();
+    txt('✉️', 44, y + 22, 18, '#fff', 'center');
+    txt(ml.title, 62, y + 16, 12, got ? '#8a7aa5' : '#fff');
+    txt(ml.body, 62, y + 33, 10, '#9a8ab5');
+    rewLabel(62, y + 52, ml.reward, 11);
+    if (got) txt('수령 완료', W - 38, y + 50, 11, '#6b5a85', 'right');
+    else claimBtns(W - 36, y + 36, ml.reward, () => { SAVE.mailGot[ml.id] = true; }, 26);
+  });
+  if (!MAIL.length) txt('받은 우편이 없어요', W / 2, 300, 12, '#8a7aa5', 'center');
+  txt('업데이트·이벤트 보상이 이곳으로 와요', W / 2, 510, 10, '#6b5a85', 'center');
+}
+function mClear() {
+  panel(10, 40, W - 20, 616, '클리어 보상');
+  txt('최초 클리어 ' + CUR.gem.ico + CLEAR_REWARD.stars[0] + ' · 별을 더 모으면 추가 보상', W / 2, 74, 10, '#9a8ab5', 'center');
+  const rh = 26;
+  STAGES.forEach((S, i) => {
+    const y = 86 + i * rh, st = starsOf(i), cl = SAVE.clr.s[i] || 0, pend = clrPend(i);
+    ctx.fillStyle = i % 2 ? '#1d1729' : '#211a2e'; ctx.fillRect(18, y, W - 36, rh - 2);
+    txt('제' + S.no + '관문', 26, y + 12, 11, st ? '#fff' : '#6b5a85');
+    txt('★'.repeat(st) + '☆'.repeat(3 - st), 90, y + 12, 11, '#ffd35a');
+    if (pend) { const r = { gems:clrStageRew(i) }; rewLabel(144, y + 12, r, 11); claimBtns(W - 22, y + 1, r, () => { SAVE.clr.s[i] = st; }, rh - 4); }
+    else if (cl >= 3) txt('완료 ✓', W - 26, y + 12, 10, '#6bdc7a', 'right');
+    else if (cl > 0) txt('받음 · ★' + (cl + 1) + ' 달성 시 ' + CUR.gem.ico + CLEAR_REWARD.stars[cl], W - 26, y + 12, 9, '#9ae8b5', 'right');
+    else txt('미돌파', W - 26, y + 12, 10, '#6b5a85', 'right');
+  });
+  const my = 86 + STAGES.length * rh + 8;
+  txt('관문 돌파 기념', 22, my + 4, 11, '#c9b8ff');
+  Object.keys(CLEAR_REWARD.milestone).forEach((nk, j) => {
+    const y = my + 14 + j * 30, r = CLEAR_REWARD.milestone[nk], got = SAVE.clr.m[nk];
+    ctx.fillStyle = got ? '#1c2a22' : SAVE.cleared >= nk ? '#3a2a1e' : '#211a2e'; ctx.fillRect(18, y, W - 36, 28);
+    txt(nk + '관문 돌파', 26, y + 14, 11, '#fff');
+    rewLabel(104, y + 14, r, 11);
+    if (got) txt('완료 ✓', W - 26, y + 14, 10, '#6bdc7a', 'right');
+    else if (clrMileCan(nk)) claimBtns(W - 22, y + 2, r, () => { SAVE.clr.m[nk] = true; }, 24);
+    else txt('미달성', W - 26, y + 14, 10, '#6b5a85', 'right');
+  });
 }
 
 /* ================= 출정 선택 ================= */
 /* 관문이 15개라 세로로 스크롤한다. 5관문마다 한 장(章)이고, 마지막 관문에는 보스(메인 용사)가 있다. */
 const SS = { y:0, init:false, max:0 };
 function goStages() { scene = 'stages'; SS.init = false; }
+/* 전투 탭 위쪽 보상 아이콘 5개. 받을 게 있으면 빨간 점 */
+function drawRewardIcons(y) {
+  const d = rewardDots(), bl = boxLeft();
+  const items = [['quest', '📋', '일일퀘스트'], ['att', '📅', '출석보상'], ['box', '🎁', bl > 0 ? fmtT(bl) : '열기!'], ['mail', '✉️', '우편'], ['clear', '🏁', '클리어보상']];
+  const w = (W - 24 - 4 * 6) / 5;
+  items.forEach(([k, ico, nm], i) => {
+    const x = 12 + i * (w + 6);
+    BTN.push({ x, y, w, h:52, act:() => { M = { k }; }, label:'보상:' + k });
+    ctx.fillStyle = '#1e1829'; rbox(x, y, w, 52, 10); ctx.fill();
+    ctx.strokeStyle = d[k] ? '#ffd35a' : '#3a2f4d'; ctx.lineWidth = d[k] ? 1.5 : 1; rbox(x, y, w, 52, 10); ctx.stroke();
+    txt(ico, x + w / 2, y + 20, 20, '#fff', 'center');
+    txt(nm, x + w / 2, y + 42, 9, k === 'box' && d.box ? '#ffd35a' : '#c9b8ff', 'center');
+    if (d[k]) rdot(x + w - 5, y + 5);
+  });
+}
 function drawStages() {
   BTN = [];
   ctx.fillStyle = '#120e1a'; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#171222';
   for (let y = 0; y < H; y += 22) for (let x = (y / 22 % 2) * 11; x < W; x += 22) ctx.fillRect(x, y, 21, 21);
-  const TOP = 76, rh = 54, rg = 6, chH = 30;
+  const TOP = 96, BOT = NAV_Y, rh = 54, rg = 6, chH = 30;
   /* 내용 높이 */
   const bodyH = 3 * (chH + 5 * (rh + rg)) + 8 + 68 + 20 + 100;
-  SS.max = Math.max(0, bodyH - (H - TOP) + 10);
+  SS.max = Math.max(0, bodyH - (BOT - TOP) + 10);
   if (!SS.init) {
     const i = Math.min(STAGES.length - 1, SAVE.cleared), ch = Math.floor(i / 5);
     SS.y = ch * (chH + 5 * (rh + rg)) + chH + (i % 5) * (rh + rg) - 80; SS.init = true;
   }
   SS.y = Math.max(0, Math.min(SS.max, SS.y));
 
-  ctx.save(); ctx.beginPath(); ctx.rect(0, TOP, W, H - TOP); ctx.clip();
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TOP, W, BOT - TOP); ctx.clip();
   let y = TOP - SS.y;
   const addBtn = (x, yy, w, h, act, label) => {
-    const y1 = Math.max(yy, TOP), y2 = Math.min(yy + h, H);
+    const y1 = Math.max(yy, TOP), y2 = Math.min(yy + h, BOT);
     if (y2 > y1) BTN.push({ x, y:y1, w, h:y2 - y1, act, label });
   };
   const CHCOL = ['#b9a4ff', '#ff9a7a', '#7adcd8'];
@@ -1900,8 +2433,8 @@ function drawStages() {
     y += chH;
     for (let k = 0; k < 5; k++) {
       const i = ch * 5 + k, S = STAGES[i], open = stageOpen(i), done = SAVE.cleared > i;
-      if (y + rh > TOP && y < H) {
-        addBtn(12, y, W - 24, rh, () => startBattle(i), '제' + S.no + '관문');
+      if (y + rh > TOP && y < BOT) {
+        addBtn(12, y, W - 24, rh, () => { if (open) M = { k:'stage', i }; else toast('앞 관문을 먼저 돌파해야 열려요'); }, '제' + S.no + '관문');
         ctx.fillStyle = done ? '#22402f' : open ? (S.boss ? '#4a2a22' : '#3f2433') : '#1a1524';
         rbox(12, y, W - 24, rh, 8); ctx.fill();
         ctx.strokeStyle = done ? '#4e8a66' : open ? (S.boss ? '#ff9a4a' : '#ffd35a') : (S.boss ? '#5a3a2e' : '#2e2640');
@@ -1914,7 +2447,8 @@ function drawStages() {
         if (tSlots(i + 1) > tSlots(i)) sub += ' · 함정칸+1';
         txt(open ? sub : '앞 관문을 돌파하면 열려요', 26, y + 36, 10, '#9a8ab5');
         if (S.boss) txt('👑 ' + DEF[S.boss].name, 26, y + 49, 9, open ? '#ffb27a' : '#6b5a85');
-        txt(done ? '돌파함' : open ? '첫 돌파 ◆' + S.gems : '잠김', W - 26, y + 17, 11, done ? '#6bdc7a' : open ? '#8be9ff' : '#6b5a85', 'right');
+        if (done) { const st = starsOf(i); txt('★'.repeat(st) + '☆'.repeat(3 - st), W - 26, y + 17, 13, '#ffd35a', 'right'); }
+        else txt(open ? '첫 돌파 ◆' + S.gems : '잠김', W - 26, y + 17, 11, open ? '#8be9ff' : '#6b5a85', 'right');
         if (done) txt('재도전 ◆' + Math.floor(S.gems * 0.35), W - 26, y + 36, 10, '#8be9ff', 'right');
         ctx.globalAlpha = 1;
       }
@@ -1922,7 +2456,7 @@ function drawStages() {
     }
   }
   const ey = y + 8, eopen = stageOpen(ENDLESS);
-  addBtn(12, ey, W - 24, 68, () => startBattle(ENDLESS), '무한의 문');
+  addBtn(12, ey, W - 24, 68, () => { if (eopen) M = { k:'stage', i:ENDLESS }; else toast('모든 관문을 돌파하면 열려요'); }, '무한의 문');
   ctx.fillStyle = eopen ? '#2d2150' : '#1a1524'; rbox(12, ey, W - 24, 68, 8); ctx.fill();
   ctx.strokeStyle = eopen ? '#c77dff' : '#2e2640'; ctx.lineWidth = eopen ? 2 : 1; rbox(12, ey, W - 24, 68, 8); ctx.stroke();
   ctx.globalAlpha = eopen ? 1 : 0.45;
@@ -1935,7 +2469,7 @@ function drawStages() {
   /* 접두 능력 안내 */
   const ly = ey + 86;
   txt('침입자 접두 능력', 14, ly, 11, '#c9b8ff');
-  const keys = Object.keys(AFFIX), lw = (W - 28) / 2;
+  const keys = Object.keys(AFFIX).filter(k => k !== 'named'), lw = (W - 28) / 2;
   keys.forEach((k, i) => {
     const A = AFFIX[k], x = 14 + (i % 2) * lw, yy = ly + 20 + Math.floor(i / 2) * 20;
     ctx.fillStyle = A.col; rbox(x, yy - 7, 34, 14, 7); ctx.fill();
@@ -1946,15 +2480,12 @@ function drawStages() {
   txt('쓰러진 부하는 웨이브가 끝나면 모두 회복돼요', 14, ly + 70, 9, '#8a7aa5');
   ctx.restore();
 
-  /* 고정 머리줄 (스크롤 위에 덮는다) */
+  /* 고정 머리줄 (스크롤 위에 덮는다): 보상 아이콘 */
   ctx.fillStyle = '#120e1a'; ctx.fillRect(0, 0, W, TOP);
-  txt('출정', 14, 26, 20, '#ffd9f0');
-  txt('◆ ' + SAVE.gems, W - 12, 26, 15, '#8be9ff', 'right');
-  btn(12, 44, 70, 24, '← 로비', () => { scene = 'lobby'; }, { bg:'#241d2e', fs:11 });
-  txt('부하 칸 ' + mSlots() + ' · 함정 칸 ' + tSlots(), W - 12, 56, 10, '#9a8ab5', 'right');
+  drawRewardIcons(36);
   if (SS.max > 0) {
     ctx.fillStyle = 'rgba(200,180,255,.25)';
-    const th = Math.max(30, (H - TOP) * (H - TOP) / (H - TOP + SS.max)), ty = TOP + (H - TOP - th) * (SS.y / SS.max);
+    const VH = BOT - TOP, th = Math.max(30, VH * VH / (VH + SS.max)), ty = TOP + (VH - th) * (SS.y / SS.max);
     ctx.fillRect(W - 4, ty, 2, th);
   }
 }
@@ -2311,6 +2842,7 @@ function drawGame() {
       else txt('최고 기록 ' + SAVE.endlessBest + ' 웨이브', W / 2, 318, 13, '#9a8ab5', 'center');
       txt('획득 ◆ ' + G.gems, W / 2, 352, 19, '#8be9ff', 'center');
     } else {
+      if (win && G.stars) txt('★'.repeat(G.stars) + '☆'.repeat(3 - G.stars), W / 2, 214, 28, '#ffd35a', 'center');
       txt(win ? '관문 돌파!' : '수호석이 부서졌다', W / 2, 250, 24, win ? '#ffd35a' : '#ff6b6b', 'center');
       txt('제' + S.no + '관문 · ' + S.name, W / 2, 286, 14, '#c9b8ff', 'center');
       if (win && G.first) txt('다음 관문이 열렸어요', W / 2, 314, 13, '#6bdc7a', 'center');
@@ -2335,7 +2867,7 @@ function drawGame() {
   }
 }
 function draw() {
-  scene === 'lobby' ? drawLobby() : scene === 'stages' ? drawStages() : drawGame();
+  scene === 'game' ? drawGame() : drawMenu();
   advDraw();
 }
 
@@ -2362,8 +2894,8 @@ function tap(x, y) {
     for (const b of BTN) if (b.label && String(b.label).indexOf('광고') === 0 && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
     return;
   }
-  if (scene === 'lobby' || scene === 'stages') {
-    if (scene === 'lobby' && L.result) { L.result = null; SFX.tap(); return; }
+  if (scene !== 'game') {
+    if (L.result) { L.result = null; SFX.tap(); return; }
     for (const b of BTN) if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
     return;
   }
@@ -2410,7 +2942,7 @@ cv.addEventListener('pointermove', e => {
   if (e.pointerId !== primaryId || !startPt) return;
   const off = Math.hypot(p[0] - startPt[0], p[1] - startPt[1]);
   if (off > maxMove) maxMove = off;
-  if (scene === 'stages' && maxMove > TAP_SLOP) { SS.y += prev[1] - p[1]; }
+  if (scene === 'stages' && !M && maxMove > TAP_SLOP) { SS.y += prev[1] - p[1]; }
   if (orbiting && maxMove > TAP_SLOP) {
     cam.yaw -= (p[0] - prev[0]) * 0.009;
     cam.pitch = Math.max(0.22, Math.min(1.552, cam.pitch + (p[1] - prev[1]) * 0.006));
@@ -2428,7 +2960,7 @@ function endPointer(e) {
 }
 cv.addEventListener('pointerup', endPointer);
 cv.addEventListener('pointercancel', endPointer);
-cv.addEventListener('wheel', e => { e.preventDefault(); if (scene === 'stages') { SS.y += e.deltaY * 0.6; return; } cam.dist = Math.max(180, Math.min(900, cam.dist + e.deltaY * 0.6)); camManual = true; }, { passive:false });
+cv.addEventListener('wheel', e => { e.preventDefault(); if (scene !== 'game') { if (scene === 'stages' && !M) SS.y += e.deltaY * 0.6; return; } cam.dist = Math.max(180, Math.min(900, cam.dist + e.deltaY * 0.6)); camManual = true; }, { passive:false });
 
 /* ================= 루프 ================= */
 let last = performance.now();
@@ -2436,6 +2968,7 @@ function loop(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   T += dt;
   advStep(dt);
+  if (TOAST.t > 0) TOAST.t -= dt;
   if (scene === 'game' && !ADV.on) {
     if (G.hs > 0) G.hs -= dt;                      /* 히트스톱: 시뮬레이션만 멈추고 화면은 계속 그린다 */
     else { G.spAcc = (G.spAcc || 0) + G.speed; while (G.spAcc >= 0.999) { update(dt); G.spAcc -= 1; } }
@@ -2831,6 +3364,7 @@ function drawStage() {
 
 /* 보스 그림 별칭: 새 그림이 오기 전까지 기존 용사 그림을 쓴다 */
 ART_IMG.boss1 = ART_IMG.champion; ART_IMG.boss2 = ART_IMG.paladin; ART_IMG.boss3 = ART_IMG.warlock;
+ART_IMG.assassin = ART_IMG.looter; ART_IMG.heroking = ART_IMG.champion;
 </script>
 </body>
 </html>

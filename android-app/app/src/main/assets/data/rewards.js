@@ -1,0 +1,38 @@
+/* =========================================================
+   보상 (일일 퀘스트 · 출석 · 접속상자 · 클리어 · 우편)
+   reward = { gems:◆, soul:영혼석 }. ◆는 광고를 보면 2배, 영혼석은 언제나 그대로.
+   ========================================================= */
+
+/* 일일 퀘스트: 매일 자정 초기화. id는 게임 코드가 진행도를 올릴 때 쓰는 이름이라 바꾸지 말 것 */
+const DAILY_QUESTS = [
+  { id:'clear', name:'관문 3회 클리어',  need:3,  reward:{ gems:50 } },
+  { id:'kill',  name:'용사 20명 처치',   need:20, reward:{ gems:50 } },
+  { id:'pull',  name:'부하 소환 3회',    need:3,  reward:{ gems:50 } },
+  { id:'ad',    name:'광고 1회 시청',    need:1,  reward:{ gems:50 } },
+  { id:'deck',  name:'덱 편성 변경 1회', need:1,  reward:{ gems:50 } },
+];
+const DAILY_ALL = { gems:150, soul:5 };   /* 5개 모두 완료 보너스 */
+
+/* 출석: 7일 주기, 하루 1번 (연속이 아니어도 됨). 7일차를 받으면 1일차로 돌아간다 */
+const ATTEND = [
+  { gems:100 }, { gems:100 }, { gems:150, soul:5 }, { gems:150 },
+  { gems:200, soul:5 }, { gems:200 }, { gems:500, soul:20 },
+];
+
+/* 접속상자: hours마다 하나 (앱을 꺼도 시간은 흐른다) */
+const BOX = { hours:4, reward:{ gems:80 } };
+
+/* 클리어 보상
+   stars[n] = 관문에서 별 n+1개를 처음 달성했을 때 ◆ (★1 = 최초 클리어)
+   starAt[n] = 별 n+1개 조건: 남은 수호석 비율 */
+const CLEAR_REWARD = {
+  stars:[30, 10, 20],
+  starAt:[0, 0.5, 0.8],
+  starName:['관문 돌파', '수호석 50% 이상', '수호석 80% 이상'],
+  milestone:{ 5:{ gems:200, soul:10 }, 10:{ gems:300, soul:20 }, 15:{ gems:500, soul:30 } },
+};
+
+/* 시스템 우편 (업데이트·이벤트 보상). id가 같으면 한 번만 받을 수 있다 */
+const MAIL = [
+  { id:'welcome', title:'마왕의 던전에 오신 걸 환영해요!', body:'첫 출정 준비금이에요', reward:{ gems:200 } },
+];
