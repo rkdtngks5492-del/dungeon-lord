@@ -1,6 +1,7 @@
 package com.dungeonlord.game;
 
 import android.annotation.SuppressLint;
+import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.VibrationEffect;
@@ -184,6 +185,10 @@ public class MainActivity extends AppCompatActivity {
 
     /* ---------- 앱 기능 창구 (종료 · 진동) ---------- */
     public class AppBridge {
+        /* 디버그 빌드에서만 true: 게임의 '디버그 표시' 메뉴가 이걸로 보이거나 숨는다 */
+        @JavascriptInterface
+        public boolean isDebug() { return (getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0; }
+
         /* 게임의 "게임을 종료할까요?"에서 종료를 누르면 */
         @JavascriptInterface
         public void exit() { runOnUiThread(MainActivity.this::finish); }

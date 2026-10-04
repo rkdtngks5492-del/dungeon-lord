@@ -690,7 +690,7 @@ const DEF = {
             art:{ shape:'burly', body:'#aab4c4', accent:'#3a5a9a', helm:true, weapon:'spear', cape:'#2a4a8a' } },
   ranger: { ico:'🏹', side:'H', tier:'knight', name:'궁기사', hp:95, dmg:9, rng:100, cd:1.2, spd:28, rew:5, shot:true, sc:39,
             art:{ shape:'burly', body:'#4a7a5a', accent:'#2a4a3a', weapon:'bow' } },
-  cleric: { ico:'✨', side:'H', tier:'knight', name:'사제', hp:105, dmg:4, rng:90, cd:1.7, spd:24, rew:6, heal:9, sc:39,
+  cleric: { ico:'✨', side:'H', tier:'knight', name:'사제', hp:105, dmg:4, rng:90, cd:1.7, spd:24, rew:6, heal:0.15, sc:39,
             art:{ shape:'burly', body:'#f0ead8', accent:'#d8b85a', weapon:'staff', glow:'#ffe9a8' } },
   warlock:{ ico:'🔮', side:'H', tier:'knight', name:'마법사', hp:95, dmg:15, rng:105, cd:2.0, spd:24, rew:6, aoe:true, shot:true, sc:39,
             art:{ shape:'burly', body:'#4a4a8a', accent:'#2a2a5a', hood:true, weapon:'staff', glow:'#8be9ff' } },
@@ -829,8 +829,9 @@ const STAGE_NAMES = ['바깥 통로', '지하 묘지', '돌의 회랑', '폐허�
                      '성채 입구', '피의 회랑', '옥좌의 길', '봉인된 성소', '성기사단 본진',
                      '심연 계단', '뒤틀린 서고', '불꽃의 광장', '어둠의 대성당', '심연의 왕좌'];
 const STAGE_GEMS = [140, 200, 280, 380, 800, 600, 780, 1000, 1300, 2600, 1800, 2300, 2900, 3600, 7000];
-/* 5·10관문(보스) 배율은 무과금 진행 시뮬레이션으로 맞춤: 소환 운이 나빠도 하루 안에 넘을 수 있게 (0.75→0.68, 1.00→0.85) */
-const STAGE_MUL = [1.30, 1.40, 1.50, 1.60, 0.68, 0.80, 1.50, 0.72, 1.60, 0.85, 1.70, 1.90, 1.90, 2.00, 0.80];
+/* 5관문(보스) 배율은 무과금 진행 시뮬레이션으로 맞춤 (0.75→0.68).
+   10·15관문은 성녀 무적·원거리 회복을 고친 뒤 같은 조건 승률이 원래대로 돌아오게 다시 맞춤 (10: 1.00, 15: 0.80→0.90) */
+const STAGE_MUL = [1.30, 1.40, 1.50, 1.60, 0.68, 0.80, 1.50, 0.72, 1.60, 1.00, 1.70, 1.90, 1.90, 2.00, 0.90];
 /* 방어 라인(입구 쪽 z좌표): 권속은 이 선보다 입구 쪽으로 나가지 못한다.
    관문 번호(0부터)별로 값을 넣으면 그 값을 쓰고, 없으면 그 장의 갈림길 위치(FORK_Z)를 쓴다. 예: { 3:150 } */
 const STAGE_DEFLINE = {};
@@ -1456,6 +1457,17 @@ const KB_MAX = 6;   /* 그림으로만 밀리는 최대 거리 */
 const ASSIST = 160; /* 이 거리 안(또는 같은 길)에서 아군이 싸우면 대기 중인 권속도 합류한다 */
 const AGGRO_T = 3;  /* 맞은 뒤 때린 침입자를 쫓는 시간(초) */
 const HEAL_AT = 0.5; /* 지원은 체력이 이 비율 아래인 아군만 고친다 */
+const HEAL_RNG = 70;  /* 회복 사거리 (같은 길이나 합류 뒤 교차로에서만) */
+const HEAL_BOSS = 0.5; /* 보스에게 들어가는 회복량 배율 */
+const STALL_T = 3;    /* 교전 중인데 이 시간 동안 피해를 못 주면 다른 대상을 찾거나 방어 라인을 넘어 다가간다 */
+const BREAK_T = 5;    /* 그때 방어 라인을 넘어 쫓아갈 수 있는 시간 */
+const CRUISE = 1.5;   /* 싸우지 않고 걷는 침입자 무리의 속도 배율 (빈 구간을 빨리 지나가게) */
+/* 침입자 기본 이동 속도: 전체적으로 조금, 느린 탱커·보스는 더 많이 올린다 (18 → 약 26, 26 → 약 31, 46 → 약 53) */
+function heroSpd(s) { return s * 1.15 + Math.max(0, 28 - s) * 0.5; }
+/* 같은 길이거나, 둘 다 합류 뒤 교차로 구간이면 서로 회복할 수 있다 */
+function sameLane(a, b) { return a.road === b.road || (a.z >= MERGE_Z - 10 && b.z >= MERGE_Z - 10); }
+/* 회복량: 보스는 절반 */
+function healAmt(o, frac) { return Math.round(o.maxHp * frac * (o.boss ? HEAL_BOSS : 1)); }
 const ENTRY = 30;   /* 침입자가 나타나는 자리: 갈림길에서 입구 쪽으로 이만큼 */
 const GUARD_R = 95; /* 배치 칸에서 이 거리 안으로 들어온 침입자는 그 칸 권속이 나가서 막는다 */
 function isMelee(u) { return u.def.rng < 60 && !u.def.fly && u.def.role !== 'assassin'; }
@@ -1511,9 +1523,10 @@ function fireTrap(b) {
 function hitstop(v) { if (v > G.hs) G.hs = v; }
 function punch(v) { if (v > camPunch) camPunch = v; }
 /* 침입자가 받는 피해. 강철 접두는 일부를 흘려낸다 */
-function dmgHero(h, amt) {
+/* spell = 마왕의 주문(포효·운석): 보호막을 무시하고 반드시 들어간다 */
+function dmgHero(h, amt, spell) {
   let d = amt * (1 - (h.dr || 0));
-  if (h.shield > 0) { const a = Math.min(h.shield, d); h.shield -= a; d -= a; }
+  if (h.shield > 0 && !spell) { const a = Math.min(h.shield, d); h.shield -= a; d -= a; }
   h.hp -= d; h.hitT = 1; return d;
 }
 /* 권속이 받는 피해: 무적(석화) → 0, 수호·패시브 피해 감소 적용. 탱커는 맞을 때 스킬 게이지 추가 충전 */
@@ -1529,6 +1542,7 @@ function dmgMinion(v, amt) {
 function castActive(b) {
   const US = uSkill(b.key), a = US.act;
   if (!a || (b.g || 0) < 1 || G.phase !== 'run') return false;
+  b.castT = 0.8;   /* 디버그 표시: 스킬 사용 중 */
   const pw = US.pow, dm = US.durM, d = b.dmg;
   const seen = G.heroes.filter(h => h.hp > 0 && unitSees(b, h));
   const within = (r, x, z) => seen.filter(h => dist2(h.x, h.z, x, z) <= r);
@@ -1620,11 +1634,12 @@ function bossTick(h, dt) {
     note('#ffd35a');
   } else if (sk === 'aegis') {
     h.skT = 11;
-    for (const o of mates) { o.shield = o.maxHp * 0.16; o.shieldT = 8; }
+    for (const o of mates) { o.shield = o.maxHp * 0.16; o.shieldT = 4; }   /* 몇 초만, 보호막 표시와 함께 */
     note('#8be9ff');
   } else if (sk === 'healall') {
     h.skT = 10;
-    for (const o of mates) { const a = Math.round(o.maxHp * 0.25); o.hp = Math.min(o.maxHp, o.hp + a); sev('heal', h, o, a); }
+    /* 가까이 있는 같은 길 아군만 */
+    for (const o of G.heroes) if (o.hp > 0 && sameLane(h, o) && dist2(h.x, h.z, o.x, o.z) <= HEAL_RNG * 1.5) { const a = healAmt(o, 0.25); o.hp = Math.min(o.maxHp, o.hp + a); sev('heal', h, o, a); }
     note('#9bffb4'); SFX.heal();
   } else if (sk === 'whirl' || sk === 'backstab') {
     const foes = G.rooms.filter(b => b && b.def.kind === 'minion' && heroSees(h, b) && dist2(h.x, h.z, b.x, b.z) <= (sk === 'whirl' ? 72 : SEEK + 60));
@@ -1722,7 +1737,7 @@ function spawnParty(pp) {
     const fz = FORM[role] - Math.floor(idx / 3) * 11, fx = ((idx % 3) - 1) * 22 + (Math.random() - 0.5) * 5;
     const pos = pathPos(P.road, Math.max(0, P.d + fz));
     const h = { type:m.type, def, af:m.af, A, hp, maxHp:hp,
-      dmg:def.dmg * sc * (A ? A.dmg : 1), spd:def.spd * (A ? A.spd : 1),
+      dmg:def.dmg * sc * (A ? A.dmg : 1), spd:heroSpd(def.spd) * (A ? A.spd : 1),
       cdm:A && A.cd ? A.cd : 1, dr:A && A.dr ? A.dr : 0, scl:A && A.sc ? A.sc : 1,
       road:P.road, party:P, fz, fx, d:Math.max(0, P.d + fz), fighting:false,
       cd:0.5 + Math.random() * 0.5, slow:0, stun:0, x:pos[0] + fx, z:pos[1], yaw:0, atk:0, hitT:0,
@@ -1824,7 +1839,7 @@ function castSkill(k) {
   if (sk.aim) { G.aim = G.aim === k ? null : k; if (G.aim) say('운석을 떨어뜨릴 곳을 누르세요'); return; }
   G.scd[k] = sk.cd;
   if (k === 'roar') {
-    for (const h of G.heroes) { const d = dmgHero(h, 45); h.stun = 1.5; sev('hit', null, h, d, { col:'#ff7ad9' }); fxText(h.x, h.z, '-' + Math.round(d), '#ff7ad9'); burst(h.x, 14, h.z, 5, '#ff7ad9', 50); }
+    for (const h of G.heroes) { const d = dmgHero(h, 45, true); h.stun = 1.5; sev('hit', null, h, d, { col:'#ff7ad9' }); fxText(h.x, h.z, '-' + Math.round(d), '#ff7ad9'); burst(h.x, 14, h.z, 5, '#ff7ad9', 50); }
     fxRing(STONE.x, STONE.z, 520, '#ff7ad9', 0.7); shake = 11; hitstop(0.08); punch(42); SFX.roar();
   } else if (k === 'frenzy') { G.frenzy = 8; say('권속들이 광기에 휩싸였어요'); SFX.frenzy(); for (const b of G.rooms) if (b) burst(b.x, 14, b.z, 8, '#ff5a5a', 40); }
   else if (k === 'seal') { G.seal = 3; say('시간이 멈췄어요'); fxRing(MAPC.x, MAPC.z, 460, '#8be9ff', 1.0); SFX.seal(); hitstop(0.06); }
@@ -1866,7 +1881,7 @@ function update(dt) {
     m.t -= dt; m.y = Math.max(0, m.t / 0.75 * 420);
     if (m.t <= 0) {
       fxRing(m.x, m.z, 150, '#ffa94d', 0.6); burst(m.x, 10, m.z, 30, '#ffa94d', 150); shake = 16; hitstop(0.12); punch(60); SFX.boom();
-      for (const h of G.heroes) if (dist2(h.x, h.z, m.x, m.z) <= 76) { const d = dmgHero(h, 85); sev('hit', null, h, d, { col:'#ffa94d' }); knock(h, h.x - m.x, h.z - m.z, 16); fxText(h.x, h.z, '-' + Math.round(d), '#ffa94d'); }
+      for (const h of G.heroes) if (dist2(h.x, h.z, m.x, m.z) <= 76) { const d = dmgHero(h, 85, true); sev('hit', null, h, d, { col:'#ffa94d' }); knock(h, h.x - m.x, h.z - m.z, 16); fxText(h.x, h.z, '-' + Math.round(d), '#ffa94d'); }
     }
   }
   G.meteors = G.meteors.filter(m => m.t > 0);
@@ -1943,17 +1958,20 @@ function update(dt) {
     /* 지원: 체력이 낮은 아군만 고친다. 걸으면서 고치므로 멈춰 서지 않고, 지원 때문에 무리가 멈추지도 않는다 */
     if (df.heal && G.waveT < 210) {
       let al = null, br = HEAL_AT;
-      for (const o of G.heroes) { const r = o.hp / o.maxHp; if (r < br && dist2(h.x, h.z, o.x, o.z) <= df.rng) { br = r; al = o; } }
+      for (const o of G.heroes) { const r = o.hp / o.maxHp; if (o.hp > 0 && r < br && sameLane(h, o) && dist2(h.x, h.z, o.x, o.z) <= HEAL_RNG) { br = r; al = o; } }
+      h.healing = !!al;
       if (al) {
+        h.tgt = al;
         if (h.cd <= 0) {
           h.cd = df.cd * h.cdm; h.atk = 1;
-          const amt = Math.round(al.maxHp * df.heal); al.hp = Math.min(al.maxHp, al.hp + amt);
+          const amt = healAmt(al, df.heal); al.hp = Math.min(al.maxHp, al.hp + amt);
           fxText(al.x, al.z, '+' + amt, '#7dff9b'); fxShot(h.x, h.z, al.x, al.z, '#7dff9b'); SFX.heal(); sev('heal', h, al, amt);
         }
       }
     }
     if (!acted) {
       const tg = (h.dmg > 0 && h.def.role !== 'support') ? foeFor(h, near, true) : null;
+      h.tgt = tg || (h.healing ? h.tgt : null);
       if (tg) {
         h.fighting = true;
         h.yaw = Math.atan2(tg.x - h.x, tg.z - h.z);
@@ -1994,8 +2012,13 @@ function update(dt) {
             h.dustT -= dt; if (h.dustT <= 0) { h.dustT = 0.3; dust(h.x, h.z, 2); }
           }
         }
+      } else if (df.heal && P.fight && !h.healing) {
+        /* 고칠 아군이 없는 지원은 뒤에 서 있지 않고 혼자서라도 수호석 쪽으로 걸어간다 */
+        const nd = Math.min(ROADS[h.road].len, dOfZ(h.road, h.z) + h.spd * (h.slow > 0 ? (h.slowF || 0.5) : 1) * dt), q = pathPos(h.road, nd);
+        const dx = q[0] + h.fx * 0.3 - h.x, dz = q[1] - h.z; h.x += dx; h.z += dz;
+        if (Math.abs(dx) + Math.abs(dz) > 0.01) { h.yaw = Math.atan2(dx, dz); h.moving = 1; }
       } else if (!P.fight) {
-        const want = pathPos(h.road, Math.min(ROADS[h.road].len, P.d + h.fz)), k = Math.min(1, dt * 3.2);
+        const want = pathPos(h.road, Math.min(ROADS[h.road].len, P.d + h.fz)), k = Math.min(1, dt * 3.2 * CRUISE);
         const px = h.x, pz = h.z;
         const fx = featAt(h.x, h.z, 'choke') ? h.fx * 0.15 : h.fx;   /* 병목에서는 한 줄로 */
         h.x += (want[0] + fx - h.x) * k; h.z += (want[1] - h.z) * k;
@@ -2009,7 +2032,7 @@ function update(dt) {
   }
   /* 싸움이 끝나면 대형을 그 자리에서 다시 짜서 행군을 이어 간다 */
   if (G.seal <= 0) for (const P of G.parties) {
-    if (P.fight) P.d = P.dAvg; else P.d = Math.min(ROADS[P.road].len + 44, P.d + P.sp * dt);
+    if (P.fight) P.d = P.dAvg; else P.d = Math.min(ROADS[P.road].len + 44, P.d + P.sp * CRUISE * dt);
   }
 
   /* ===== 권속: 같은 길의 침입자를 마중 나가 막는다 ===== */
@@ -2024,6 +2047,7 @@ function update(dt) {
     if (b.spawnT > 0) b.spawnT -= dt * 2.6;
     if (b.markT > 0) b.markT -= dt;
     if (b.guardT > 0) b.guardT -= dt;
+    if (b.castT > 0) b.castT -= dt;
     if (b.ttl !== undefined) { b.ttl -= dt; if (b.ttl <= 0) b.hp = 0; }     /* 분신은 시간이 다 되면 사라진다 */
     if (b.invT > 0) { b.invT -= dt; if (b.invT <= 0 && b.petStun) petrifyEnd(b); }
     const US = uSkill(b.key);
@@ -2085,7 +2109,8 @@ function update(dt) {
           const lm = Math.max(lim, Math.hypot(b.x - b.hx, b.z - b.hz));
           if (od > lm && !free) { nx = b.hx + ox / od * lm; nz = b.hz + oz / od * lm; }
           /* 길 밖으로는 못 나간다 */
-          nz = Math.max(G.defLine, nz);   /* 방어 라인을 넘으려 하면 라인에서 멈춘다 */
+          /* 방어 라인을 넘으려 하면 라인에서 멈춘다. 막혀서 못 때리는 중(breakT)이면 넘어가서 쫓고, 끝나면 걸어서 돌아온다 */
+          if (!(b.breakT > 0)) nz = Math.max(Math.min(G.defLine, b.z), nz);
           if (b.road < 3) { const cxr = roadCx(b.road, nz); nx = Math.max(cxr - 30, Math.min(cxr + 30, nx)); }
           else nx = Math.max(60, Math.min(300, nx));
           const mx = nx - b.x, mz = nz - b.z;
@@ -2094,10 +2119,13 @@ function update(dt) {
         }
       }
     }
+    /* 안전장치: 상대가 있는데 STALL_T초 동안 한 대도 못 때리면 방어 라인을 넘어 다가간다 */
+    if (b.breakT > 0) b.breakT -= dt;
+    if (elig.length) { b.noHitT = (b.noHitT || 0) + dt; if (b.noHitT >= STALL_T && mobile) { b.breakT = BREAK_T; b.noHitT = 0; } } else b.noHitT = 0;
     if (b.cd > 0) continue;
     const tg = foeFor(b, elig, true);
     if (tg) {
-      b.cd = b.def.cd * fr / (1 + US.pass.as); b.atk = 1; b.tgt = tg; b.engT = 2;
+      b.cd = b.def.cd * fr / (1 + US.pass.as); b.atk = 1; b.tgt = tg; b.engT = 2; b.noHitT = 0;
       b.yaw = Math.atan2(tg.x - b.x, tg.z - b.z);
       if (US.act && !b.extra && US.role !== 'tank') b.g = Math.min(1, (b.g || 0) + GAUGE_BONUS);   /* 딜러: 때릴 때 추가 충전 */
       if (b.def.shot) { fxShot(b.x, b.z, tg.x, tg.z, '#e8e8ff'); SFX.atk(b.key, true); }
@@ -2143,7 +2171,7 @@ function update(dt) {
   }
   for (const b of G.rooms) if (b && b.flash > 0) b.flash -= dt;
 
-  for (let i = 0; i < G.rooms.length; i++) if (G.rooms[i] && G.rooms[i].hp <= 0) {
+  for (let i = 0; i < G.rooms.length; i++) if (G.rooms[i] && !(G.rooms[i].hp > 0)) {
     const b = G.rooms[i]; burst(b.x, 16, b.z, 16, '#ff6b6b', 80);
     G.corpses.push({ key:b.key, def:b.def, x:b.x, z:b.z, yaw:b.yaw, t:1, dir:Math.random() < 0.5 ? -1 : 1 });
     /* 권속은 사라지지 않고 제 방에서 다시 일어선다. 긴 웨이브에서 전멸하지 않게 하는 핵심 장치 */
@@ -2151,7 +2179,8 @@ function update(dt) {
     if (!b.mini) G.revive.push({ i, key:b.key, def:b.def, maxHp:b.maxHp, dmg:b.dmg, extra:b.extra, hx:b.hx, hz:b.hz, d:b.homeD, t:1e9, full });
     G.rooms[i] = null; SFX.die(); hitstop(0.05);
   }
-  for (const h of G.heroes) if (h.hp <= 0) {
+  /* 체력이 0 이하(또는 계산 오류로 숫자가 아니면)면 어떤 상태든 반드시 쓰러진다 */
+  for (const h of G.heroes) if (!(h.hp > 0)) {
     const rew = Math.round(h.def.rew * (1 + dexBonus().heroGem));
     G.gems += rew; sev('gem', null, h, rew); fxText(h.x, h.z, '+' + rew, '#8be9ff'); burst(h.x, 16, h.z, 10, '#8be9ff', 60);
     questAdd('kill');
@@ -3292,6 +3321,13 @@ function drawScene() {
     const fs = Math.max(7, Math.min(11, 9 * (540 / p0[2]) * 1.2));
     ctx.font = fs + 'px sans-serif'; ctx.fillStyle = 'rgba(160,140,200,.8)'; ctx.fillText(o.name, p0[0], p0[1]);
   }
+  /* 보호막(보스 스킬로 몇 초만): 하늘색 고리 */
+  for (const h of G.heroes) if (h.shield > 0) {
+    const q = proj(h.x, 20, h.z); if (!q) continue; const r = 16 * (540 / q[2]);
+    ctx.save(); ctx.globalAlpha = 0.55 + Math.sin(T * 8) * 0.2; ctx.strokeStyle = '#8be9ff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(q[0], q[1] - r * 0.6, r, r * 1.3, 0, 0, 7); ctx.stroke(); ctx.restore();
+  }
+  if (DBG.on) drawDebug();
   /* 교전 중인 자리: 붉은 원 */
   for (const P of G.parties) if (P.fight) {
     let sx2 = 0, sz2 = 0, n2 = 0;
@@ -3561,7 +3597,8 @@ function drawPause() {
     btn(bx, 314, bw, 40, '관문 나가기', () => { P.conf = 'exit'; }, { fs:13 });
     btn(bx, 370, bw / 2 - 4, 40, SAVE.mute ? '🔇 소리 끔' : '🔊 소리 켬', () => { SAVE.mute = !SAVE.mute; persist(); }, { bg:'#241d2e', fs:12, fc:SAVE.mute ? '#8a7aa5' : '#8be9ff' });
     btn(bx + bw / 2 + 4, 370, bw / 2 - 4, 40, SAVE.vib === false ? '📴 진동 끔' : '📳 진동 켬', () => { SAVE.vib = SAVE.vib === false; persist(); buzz(40); }, { bg:'#241d2e', fs:12, fc:SAVE.vib === false ? '#8a7aa5' : '#8be9ff' });
-    btn(bx, 418, bw, 32, '❓ 도움말', () => { M = { k:'help' }; }, { bg:'#241d2e', fs:12, fc:'#ffd35a' });
+    btn(bx, 418, DEV ? bw / 2 - 4 : bw, 32, '❓ 도움말', () => { M = { k:'help' }; }, { bg:'#241d2e', fs:12, fc:'#ffd35a' });
+    if (DEV) btn(bx + bw / 2 + 4, 418, bw / 2 - 4, 32, DBG.on ? '🐞 디버그 켬' : '🐞 디버그 끔', () => { DBG.on = !DBG.on; }, { bg:'#241d2e', fs:12, fc:DBG.on ? '#6bdc7a' : '#8a7aa5' });
     txt('뒤로 가기를 한 번 더 누르면 계속해요', W / 2, 466, 9, '#8a7aa5', 'center');
   }
   BTN.push({ x:0, y:0, w:W, h:H, act:() => {}, label:'팝업 바깥' });
@@ -3607,6 +3644,34 @@ function draw() {
   if (scene === 'game' && M) drawModal();
   tipCheck(); drawTut();
   advDraw();
+}
+
+/* ================= 디버그 표시 =================
+   일시정지 메뉴에서 켠다. 개발용 빌드(또는 브라우저)에서만 메뉴가 보인다.
+   유닛 머리 위에: 상태 · 대상 · 체력 · 대상까지 거리/내 사거리 · 무적·보호막·방어 라인 돌파 */
+const DEV = (() => { try { const a = window.AndroidApp; return !a || !a.isDebug || !!a.isDebug(); } catch (e) { return false; } })();
+const DBG = { on:false };
+function dbgLines(u, hero) {
+  const st = (u.stun > 0 || u.petStun) ? '기절' : u.invT > 0 ? '석화' : (!hero && u.castT > 0) ? '스킬' : u.atk > 0.5 ? '공격' : u.moving > 0 ? '이동' : '대기';
+  const tg = hero ? u.tgt : (u.engT > 0 ? u.tgt : null), live = tg && tg.hp > 0;
+  const l = [st + (live ? ' → ' + tg.def.name : ''), Math.ceil(u.hp) + '/' + Math.ceil(u.maxHp)];
+  if (live) l.push(Math.round(dist2(u.x, u.z, tg.x, tg.z)) + ' / ' + u.def.rng);
+  const fl = [];
+  if (u.invT > 0) fl.push('무적'); if (u.shield > 0) fl.push('막' + Math.ceil(u.shield)); if (u.breakT > 0) fl.push('라인돌파'); if (u.noHitT > 1) fl.push('막힘' + u.noHitT.toFixed(1));
+  if (fl.length) l.push(fl.join(' '));
+  return l;
+}
+function drawDebug() {
+  ctx.save(); ctx.font = '8px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  const one = (u, hero) => {
+    const q = proj(u.x, u.def.sc * 1.9, u.z); if (!q) return;
+    const ls = dbgLines(u, hero);
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(q[0] - 40, q[1] - ls.length * 9 - 2, 80, ls.length * 9 + 2);
+    ls.forEach((t, i) => { ctx.fillStyle = hero ? '#ffb0a0' : '#b0ffc0'; ctx.fillText(t, q[0], q[1] - (ls.length - 1 - i) * 9); });
+  };
+  for (const b of G.rooms) if (b && b.def.kind === 'minion') one(b, false);
+  for (const h of G.heroes) one(h, true);
+  ctx.restore();
 }
 
 /* ================= 튜토리얼 =================
