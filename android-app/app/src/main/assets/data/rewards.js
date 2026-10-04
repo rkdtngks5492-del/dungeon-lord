@@ -7,7 +7,7 @@
 const DAILY_QUESTS = [
   { id:'clear', name:'관문 3회 클리어',  need:3,  reward:{ gems:50 } },
   { id:'kill',  name:'용사 20명 처치',   need:20, reward:{ gems:50 } },
-  { id:'pull',  name:'부하 소환 3회',    need:3,  reward:{ gems:50 } },
+  { id:'pull',  name:'권속 소환 3회',    need:3,  reward:{ gems:50 } },
   { id:'ad',    name:'광고 1회 시청',    need:1,  reward:{ gems:50 } },
   { id:'deck',  name:'덱 편성 변경 1회', need:1,  reward:{ gems:50 } },
 ];
@@ -18,6 +18,9 @@ const ATTEND = [
   { gems:100 }, { gems:100 }, { gems:150, soul:5 }, { gems:150 },
   { gems:200, soul:5 }, { gems:200 }, { gems:500, soul:20 },
 ];
+
+/* 일일 상자 (상점): 하루 무료 1회 + 광고 1회. 권속 카드 min~max장, 등급 확률(%) N=일반 R=희귀 SR=영웅 */
+const DAILY_BOX = { min:1, max:3, rates:{ N:70, R:25, SR:5 } };
 
 /* 접속상자: hours마다 하나 (앱을 꺼도 시간은 흐른다) */
 const BOX = { hours:4, reward:{ gems:80 } };

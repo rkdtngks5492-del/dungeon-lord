@@ -55,6 +55,8 @@ public class MainActivity extends AppCompatActivity {
         web.setBackgroundColor(0xFF0B0712);
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
         web.addJavascriptInterface(new AdBridge(), "AndroidAds");
+        /* TODO: 결제 연동을 마치면 아래 줄의 주석을 푼다. 그 전에는 게임이 "Play 스토어 등록 후 열려요"라고 안내한다 */
+        // web.addJavascriptInterface(new BillingBridge(), "AndroidBilling");
         web.loadUrl("file:///android_asset/index.html");
         setContentView(web);
 
@@ -139,6 +141,22 @@ public class MainActivity extends AppCompatActivity {
                 });
                 interstitial.show(MainActivity.this);
             });
+        }
+    }
+
+    /* ---------- 인앱 결제 (자리만) ----------
+       TODO: Play Console에 인앱 상품(예: remove_ads)을 등록한 뒤 Google Play Billing Library를 붙인다.
+       결제가 끝나면 replyPurchase(상품ID, true)로 게임에 알려 주면 게임이 광고 제거 플래그를 켠다.
+       지금은 결제 연동 전이라 항상 실패로 돌려준다. */
+    private void replyPurchase(final String productId, final boolean ok) {
+        final String id = org.json.JSONObject.quote(productId);
+        web.post(() -> web.evaluateJavascript("window.onPurchaseResult(" + id + "," + ok + ")", null));
+    }
+
+    public class BillingBridge {
+        @JavascriptInterface
+        public void buy(String productId) {
+            runOnUiThread(() -> replyPurchase(productId, false));
         }
     }
 
