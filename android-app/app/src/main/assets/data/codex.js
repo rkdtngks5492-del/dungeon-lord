@@ -35,10 +35,9 @@ const CODEX = {
   },
   hero: {
     name:'용사',
-    /* 등급순: 잡몹 → 중간보스 → 진짜 용사 */
-    keys:['trainee', 'ranger', 'looter', 'cleric', 'warlock', 'lancer', 'rookie', 'archer', 'thief',
-          'champion', 'paladin', 'assassin', 'holyknight', 'archmage', 'assassinlord',
-          'brave', 'saint', 'swordmaster', 'sage', 'heroking'],
+    /* 등급순: 일반 → 정예 → 전설 */
+    /* 용사 목록은 게임 데이터(DEF)에서 자동으로 만든다 (보스 전용·소환 유닛 제외) → index.html */
+    keys:[],
     tiers:[
       { at:0.25, soul:5,  fx:{ heroGem:0.05 }, desc:'용사 처치 ◆ +5%' },
       { at:0.50, soul:10, fx:{ heroGem:0.10 }, desc:'용사 처치 ◆ +10%' },
@@ -59,9 +58,9 @@ const NAMED_AFFIX = { name:'네임드', col:'#ff7ad9', hp:2.5, dmg:1.4, spd:1.0,
 
 /* 용사 등급: 전투 중 체력바·이름표와 용사 도감 카드 테두리 색 */
 const GRADE = {
-  mob:  { name:'잡몹',     col:'#ffffff' },
-  mid:  { name:'중간보스', col:'#c77dff' },
-  hero: { name:'용사',     col:'#ffd35a' },
+  mob:  { name:'일반', col:'#ffffff' },
+  mid:  { name:'정예', col:'#c77dff' },
+  hero: { name:'전설', col:'#ffd35a' },
 };
 /* 5·10·15관문 보스 웨이브에 함께 오는 진짜 용사 무리 (관문 번호는 0부터) */
-const HERO_PARTY = { 4:['brave'], 9:['brave', 'saint'], 14:['brave', 'saint', 'swordmaster', 'sage'] };
+const HERO_PARTY = { 4:['brave'], 9:['brave', 'saint'], 14:['brave', 'saint', 'swordmaster', 'legend'] };
