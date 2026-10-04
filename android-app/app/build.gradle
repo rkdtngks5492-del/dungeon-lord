@@ -8,7 +8,7 @@ android {
         applicationId "com.dungeonlord.game"   // ← 출시 전 본인 것으로 바꾸세요
         minSdk 24
         targetSdk 34
-        versionCode 7
+        versionCode 8
         versionName "1.0"
     }
 
