@@ -3048,7 +3048,7 @@ function mTrap(m) {
   txt('레벨 ' + MAX_LV + '를 넘은 중복 카드는 ' + CUR.gem.ico + '로 환급돼요', 34, 328, 9, '#8a7aa5');
   const y = 418, mx = e >= ENH.max, c = enhCost(e);
   btn(24, y, 152, 48, mx ? '강화 +' + e + ' (최대)' : '강화 +' + e + ' → +' + (e + 1), () => enhance(k), {
-    dis:mx || SAVE.gems < c, bg:'#1f3a4a', bc:CUR.gem.col, fs:12, sub:mx ? '최대 단계' : CUR.gem.ico + ' ' + c + '  (보유 ' + SAVE.gems + ')', sc:CUR.gem.col });
+    dis:mx || SAVE.gems < c || !SAVE.own[k], bg:'#1f3a4a', bc:CUR.gem.col, fs:12, sub:mx ? '최대 단계' : CUR.gem.ico + ' ' + c + '  (보유 ' + SAVE.gems + ')', sc:CUR.gem.col });
   btn(184, y, 152, 48, inT ? '편성 해제' : '편성하기', () => toggleWithFly(k), { bg:inT ? '#2a2140' : '#4a3a63', on:!inT, fs:13 });
   const refund = Math.floor(enhSpent(e) * RESET_REFUND);
   btn(24, y + 56, W - 48, 40, '강화 초기화', () => {
