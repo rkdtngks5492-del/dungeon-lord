@@ -959,7 +959,7 @@ function defaultSave() {
            /* 경쟁전: 관문별 남은 수호석 최고 %, 마지막으로 제출한 점수, 첫 실행 제출 여부 */
            stoneBest:{}, rankSent:0, rankInit:false,
            /* 덱 1·2·3: mteam/tteam은 지금 고른 덱의 배열을 그대로 가리킨다 (linkDeck) */
-           decks:[], deckI:0, lsort:'rar', lfilt:'all',
+           decks:[], deckI:0, lsort:'rar', lfilt:'all', lfirst:false,
            /* v4: 권속 성급·레벨·카드, 광고 제거, 일일 상자 */
            star:{}, lv:{}, cards:{}, noAds:false, dbDay:'', dbAdDay:'', v4:true };
 }
@@ -2763,6 +2763,22 @@ function renameDeck(i) {
   if (n === null || n === undefined) return;
   n = String(n).trim().slice(0, 8); if (n) { d.n = n; persist(); }
 }
+/* 전투력 (팀 요약 · 자동 편성 공용) */
+function unitPower(k) { const d = DEF[k], m = statMul(k); return d.kind === 'minion' ? d.hp * m.hp / 4 + d.dmg * m.dmg / d.cd * (d.aoe ? 14 : 10) : (d.dmg || 0) * m.dmg * 3 + (d.stun ? 60 : 0) + (d.slow ? 40 : 0); }
+const DECK_NO = ['①', '②', '③'];
+/* 이 카드가 들어간 덱 번호들 */
+function decksOf(k) { const isM = DEF[k].kind === 'minion'; return SAVE.decks.map((d, i) => ((isM ? d.m : d.t).indexOf(k) >= 0 ? i : -1)).filter(i => i >= 0); }
+/* 편성 슬롯 자리 (권속 2줄 × 5, 함정 1줄 × 8) */
+function slotRect(i, isM) { return isM ? { x:17 + (i % 5) * 66, y:132 + Math.floor(i / 5) * 78, w:62, h:74 } : { x:17 + i * 41, y:298, w:38, h:40 }; }
+/* 편성/해제 연출: 상세 창을 닫고 카드가 슬롯으로(또는 목록으로) 날아간다 */
+function toggleWithFly(k) {
+  const isM = DEF[k].kind === 'minion', team = isM ? SAVE.mteam : SAVE.tteam, was = team.indexOf(k);
+  toggleTeam(k);
+  const now = team.indexOf(k); if ((was >= 0) === (now >= 0)) return;   /* 칸이 꽉 차서 안 바뀜 */
+  M = null;
+  const card = (L.cardR || {})[k] || { x:W / 2 - 32, y:NAV_Y - 80, w:64, h:70 }, slot = slotRect(now >= 0 ? now : was, isM);
+  L.fly = { k, a:now >= 0 ? card : slot, b:now >= 0 ? slot : card, t0:T };
+}
 function drawLobby() {
   BTN = [];
   menuBg();
@@ -2770,46 +2786,86 @@ function drawLobby() {
   /* 덱 1·2·3 */
   SAVE.decks.forEach((d, i) => {
     const on = SAVE.deckI === i;
-    btn(12 + i * 100, 58, 96, 26, d.n, () => { if (on) renameDeck(i); else selectDeck(i); }, { on, bg:on ? '#4a3a63' : '#1e1829', fs:11, fc:on ? '#ffd35a' : '#c9b8ff' });
+    btn(12 + i * 100, 58, 96, 24, DECK_NO[i] + ' ' + d.n, () => { if (on) renameDeck(i); else selectDeck(i); }, { on, bg:on ? '#4a3a63' : '#1e1829', fs:11, fc:on ? '#ffd35a' : '#c9b8ff' });
   });
-  btn(314, 58, 34, 26, '✏', () => renameDeck(SAVE.deckI), { bg:'#241d2e', fs:12 });
-  /* 던전 심도 */
+  btn(314, 58, 34, 24, '✏', () => renameDeck(SAVE.deckI), { bg:'#241d2e', fs:12 });
   const dp = depthNow(), nx = SAVE.cleared < STAGES.length ? depthNow(SAVE.cleared + 1) : 0;
-  btn(12, 90, W - 24, 22, '⛏ 던전 심도 ' + dp + '  ·  권속 최대 Lv.' + dp + (nx > dp ? '   (다음 관문 돌파 → ' + nx + ')' : ''), () => { M = { k:'depth' }; },
-      { bg:'#2a2140', bc:'#8a6ad8', fs:10, fc:'#e4d4ff' });
-  /* 지금 편성: 권속 칸 / 함정 칸 (잠긴 칸은 자물쇠) */
-  const slotRow = (y, team, cap, max, nm) => {
-    txt(nm + ' ' + team.length + '/' + cap, 14, y - 7, 10, '#c9b8ff');
-    const ni = nextSlotInfo(nm === '권속' ? 'minion' : 'trap');
-    if (ni) txt(ni.at + '관문 돌파 시 ' + ni.n + '칸', W - 14, y - 7, 9, '#8a7aa5', 'right');
-    const sw = 31, sg = 2.5;
-    for (let i = 0; i < max; i++) {
-      const x = 12 + i * (sw + sg), k = team[i];
-      if (k) { BTN.push({ x, y, w:sw, h:40, act:() => openDetail(k), label:'편성칸:' + k }); unitTile(k, x, y, sw, 40, false); continue; }
-      ctx.fillStyle = i < cap ? '#1e1829' : '#141018'; rbox(x, y, sw, 40, 6); ctx.fill();
-      ctx.strokeStyle = '#3a2f4d'; ctx.lineWidth = 1; rbox(x, y, sw, 40, 6); ctx.stroke();
-      txt(i < cap ? '+' : '🔒', x + sw / 2, y + 20, i < cap ? 14 : 9, '#4a3f63', 'center');
+  btn(12, 86, W - 24, 20, '⛏ 던전 심도 ' + dp + '  ·  권속 최대 Lv.' + dp + (nx > dp ? '   (다음 관문 돌파 → ' + nx + ')' : ''), () => { M = { k:'depth' }; },
+      { bg:'#2a2140', bc:'#8a6ad8', fs:9, fc:'#e4d4ff' });
+  /* 팀 요약: 총 전투력 · 역할 구성 */
+  const pw = SAVE.mteam.reduce((a, k) => a + unitPower(k), 0) + SAVE.tteam.reduce((a, k) => a + unitPower(k), 0);
+  const rc = {}; for (const k of SAVE.mteam) rc[DEF[k].role] = (rc[DEF[k].role] || 0) + 1;
+  const roles = ['tank', 'melee', 'assassin', 'ranged', 'support'].filter(r => rc[r]).map(r => ROLE_NAME[r] + ' ' + rc[r]).join(' · ');
+  txt('⚔ 전투력 ' + Math.round(pw).toLocaleString('en-US'), 14, 120, 11, '#ffd35a');
+  txt(roles || '편성된 권속이 없어요', 130, 120, 10, '#c9b8ff');
+  if (typeof autoTeamBtn === 'function') autoTeamBtn();
+  /* 권속 편성: 큰 초상화 카드 */
+  const ms = mSlots(), ts = tSlots();
+  for (let i = 0; i < MSLOT_MAX; i++) {
+    const r = slotRect(i, true), k = SAVE.mteam[i];
+    if (k && !(L.fly && L.fly.k === k && T - L.fly.t0 < 0.35)) {
+      BTN.push({ x:r.x, y:r.y, w:r.w, h:r.h, act:() => openDetail(k), label:'편성칸:' + k });
+      const d = DEF[k];
+      ctx.fillStyle = '#2a2140'; rbox(r.x, r.y, r.w, r.h, 8); ctx.fill();
+      ctx.strokeStyle = '#ffd35a'; ctx.lineWidth = 1.8; rbox(r.x, r.y, r.w, r.h, 8); ctx.stroke();
+      const im = unitImg(k); if (im) fitImg(ctx, im, r.x + r.w / 2, r.y + r.h - 16, r.w - 6, r.h - 26); else ctx.drawImage(thumb(k), r.x + 12, r.y + 10, 38, 38);
+      ctx.fillStyle = 'rgba(10,6,18,.75)'; rbox(r.x + 2, r.y + 2, 16, 14, 4); ctx.fill(); txt(ROLE_ICO[d.role] || '', r.x + 10, r.y + 9, 9, '#fff', 'center');
+      txt('★' + starOf(k), r.x + r.w - 4, r.y + 9, 8, '#ffd35a', 'right');
+      txt(d.name.length > 5 ? d.name.slice(0, 5) : d.name, r.x + r.w / 2, r.y + r.h - 18, 8, '#fff', 'center');
+      txt('Lv.' + lvOf(k), r.x + r.w / 2, r.y + r.h - 7, 8, '#c9b8ff', 'center');
+    } else {
+      ctx.fillStyle = i < ms ? '#1e1829' : '#141018'; rbox(r.x, r.y, r.w, r.h, 8); ctx.fill();
+      ctx.strokeStyle = '#3a2f4d'; ctx.lineWidth = 1; rbox(r.x, r.y, r.w, r.h, 8); ctx.stroke();
+      txt(i < ms ? '+' : '🔒', r.x + r.w / 2, r.y + r.h / 2, i < ms ? 18 : 11, '#4a3f63', 'center');
     }
-  };
-  slotRow(134, SAVE.mteam, mSlots(), MSLOT_MAX, '권속');
-  slotRow(194, SAVE.tteam, tSlots(), TSLOT_MAX, '함정');
-  /* 보유 목록: 권속/함정 · 정렬 · 등급 필터 */
+  }
+  /* 함정 편성 */
+  txt('함정 ' + SAVE.tteam.length + '/' + ts, 14, 290, 9, '#c9b8ff');
+  const ni = nextSlotInfo('minion'); if (ni) txt('권속 칸 +1: ' + ni.at + '관문 돌파', W - 14, 290, 8, '#8a7aa5', 'right');
+  for (let i = 0; i < TSLOT_MAX; i++) {
+    const r = slotRect(i, false), k = SAVE.tteam[i];
+    if (k && !(L.fly && L.fly.k === k && T - L.fly.t0 < 0.35)) { BTN.push({ x:r.x, y:r.y, w:r.w, h:r.h, act:() => openDetail(k), label:'편성칸:' + k }); unitTile(k, r.x, r.y, r.w, r.h, true); }
+    else { ctx.fillStyle = i < ts ? '#1e1829' : '#141018'; rbox(r.x, r.y, r.w, r.h, 6); ctx.fill(); txt(i < ts ? '+' : '🔒', r.x + r.w / 2, r.y + r.h / 2, i < ts ? 13 : 9, '#4a3f63', 'center'); }
+  }
+  /* 보유 목록: 권속/함정 · 정렬 · 등급 · 편성 먼저 */
   const isM = L.tab !== 'trap';
-  btn(12, 244, 70, 24, '권속', () => { L.tab = 'minion'; }, { on:isM, bg:isM ? '#4a3a63' : '#1e1829', fs:11 });
-  btn(86, 244, 70, 24, '함정', () => { L.tab = 'trap'; }, { on:!isM, bg:!isM ? '#4a3a63' : '#1e1829', fs:11 });
+  btn(12, 346, 50, 24, '권속', () => { L.tab = 'minion'; L.lobY = 0; }, { on:isM, bg:isM ? '#4a3a63' : '#1e1829', fs:10 });
+  btn(64, 346, 50, 24, '함정', () => { L.tab = 'trap'; L.lobY = 0; }, { on:!isM, bg:!isM ? '#4a3a63' : '#1e1829', fs:10 });
   const sk = Object.keys(SORTS), fi = FILTS.indexOf(SAVE.lfilt || 'all');
-  btn(160, 244, 92, 24, '정렬: ' + (SORTS[SAVE.lsort] || '등급순'), () => { SAVE.lsort = sk[(sk.indexOf(SAVE.lsort) + 1) % sk.length]; persist(); }, { bg:'#241d2e', fs:10 });
-  btn(256, 244, 92, 24, '등급: ' + (fi <= 0 ? '전체' : RAR_NAME[FILTS[fi]]), () => { SAVE.lfilt = FILTS[(Math.max(0, fi) + 1) % FILTS.length]; persist(); },
-      { bg:'#241d2e', fs:10, fc:fi <= 0 ? '#fff' : RAR_COL[FILTS[fi]] });
-  const list = ownedList(isM), team = isM ? SAVE.mteam : SAVE.tteam;
-  const cw = 64, chh = 70, cg = 4, cx0 = (W - (cw * 5 + cg * 4)) / 2, cy0 = 276;
+  btn(118, 346, 78, 24, '정렬: ' + (SORTS[SAVE.lsort] || '등급순'), () => { SAVE.lsort = sk[(sk.indexOf(SAVE.lsort) + 1) % sk.length]; persist(); }, { bg:'#241d2e', fs:9 });
+  btn(200, 346, 70, 24, '등급: ' + (fi <= 0 ? '전체' : RAR_NAME[FILTS[fi]]), () => { SAVE.lfilt = FILTS[(Math.max(0, fi) + 1) % FILTS.length]; persist(); },
+      { bg:'#241d2e', fs:9, fc:fi <= 0 ? '#fff' : RAR_COL[FILTS[fi]] });
+  btn(274, 346, 74, 24, (SAVE.lfirst ? '☑' : '☐') + ' 편성 먼저', () => { SAVE.lfirst = !SAVE.lfirst; persist(); }, { bg:SAVE.lfirst ? '#3a2a56' : '#241d2e', fs:9, fc:SAVE.lfirst ? '#ffd35a' : '#c9b8ff' });
+  let list = ownedList(isM); const team = isM ? SAVE.mteam : SAVE.tteam;
+  if (SAVE.lfirst) list = list.filter(k => team.indexOf(k) >= 0).concat(list.filter(k => team.indexOf(k) < 0));
+  const cw = 64, chh = 70, cg = 4, cx0 = (W - (cw * 5 + cg * 4)) / 2, TOP = 376, BOT = NAV_Y - 4;
+  L.lobMax = Math.max(0, Math.ceil(list.length / 5) * (chh + cg) - (BOT - TOP)); L.lobY = Math.max(0, Math.min(L.lobMax, L.lobY || 0));
+  L.cardR = {};
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TOP, W, BOT - TOP); ctx.clip();
+  const keep = BTN.length;
   list.forEach((k, i) => {
-    const x = cx0 + (i % 5) * (cw + cg), y = cy0 + Math.floor(i / 5) * (chh + cg);
-    BTN.push({ x, y, w:cw, h:chh, act:() => openDetail(k), label:'카드:' + k });
+    const x = cx0 + (i % 5) * (cw + cg), y = TOP + Math.floor(i / 5) * (chh + cg) - L.lobY;
+    L.cardR[k] = { x, y, w:cw, h:chh };
+    if (y + chh < TOP || y > BOT) return;
+    BTN.push({ x, y:Math.max(y, TOP), w:cw, h:Math.min(y + chh, BOT) - Math.max(y, TOP), act:() => openDetail(k), label:'카드:' + k });
     unitTile(k, x, y, cw, chh, team.indexOf(k) >= 0);
+    /* 이 카드가 들어간 덱 번호 (지금 덱은 금색) */
+    decksOf(k).forEach((di, j) => {
+      const bx = x + cw - 9 - j * 13, by = y + 22, cur = di === SAVE.deckI;
+      ctx.fillStyle = cur ? '#ffd35a' : '#5a4a73'; ctx.beginPath(); ctx.arc(bx, by, 6, 0, 7); ctx.fill();
+      txt(String(di + 1), bx, by + 0.5, 8, cur ? '#141018' : '#e4d4ff', 'center');
+    });
   });
-  if (!list.length) txt('이 등급의 ' + (isM ? '권속' : '함정') + '이 없어요', W / 2, 330, 11, '#6b5a85', 'center');
-  txt('카드를 누르면 상세 창 · 레벨업 ' + CUR.gem.ico + ' · 승급은 같은 카드', W / 2, 630, 9, '#8a7aa5', 'center');
+  ctx.restore();
+  if (L.lobMax > 0) { const VH = BOT - TOP, th = Math.max(30, VH * VH / (VH + L.lobMax)); ctx.fillStyle = 'rgba(200,180,255,.25)'; ctx.fillRect(W - 4, TOP + (VH - th) * (L.lobY / L.lobMax), 2, th); }
+  if (!list.length) txt('이 등급의 ' + (isM ? '권속' : '함정') + '이 없어요', W / 2, 420, 11, '#6b5a85', 'center');
+  /* 편성 연출 (0.35초) */
+  if (L.fly) {
+    const p = Math.min(1, (T - L.fly.t0) / 0.35), e = 1 - Math.pow(1 - p, 3), a = L.fly.a, b = L.fly.b;
+    const x = a.x + (b.x - a.x) * e, y = a.y + (b.y - a.y) * e - Math.sin(e * Math.PI) * 30, w = a.w + (b.w - a.w) * e, h = a.h + (b.h - a.h) * e;
+    ctx.save(); ctx.shadowColor = '#ffd35a'; ctx.shadowBlur = 14 * (1 - p); unitTile(L.fly.k, x, y, w, h, true); ctx.restore();
+    if (p >= 1) L.fly = null;
+  }
 }
 
 /* ================= 권속 · 함정 상세 창 ================= */
@@ -2872,7 +2928,7 @@ function mUnit(m) {
           text:[d.name + '  Lv.' + lv + ' → Lv.1', '쓴 수정의 ' + Math.round(RESET_REFUND * 100) + '%인 ' + CUR.gem.ico + refund + '을 돌려받아요', '되돌릴 수 없어요'],
           ok:() => { SAVE.gems += refund; SAVE.lv[k] = 1; if (G) G.skc = {}; persist(); toast(d.name + ' 레벨 초기화 · ' + CUR.gem.ico + refund + ' 환급'); } };
   }, { dis:lv <= 1, bg:'#3a2430', fs:12, sub:lv > 1 ? CUR.gem.ico + refund + ' 환급' : '', sc:'#ff9aa4' });
-  btn(184, y + 56, 152, 40, inT ? '편성 해제' : '편성하기', () => toggleTeam(k), { bg:inT ? '#2a2140' : '#4a3a63', on:!inT, fs:13 });
+  btn(184, y + 56, 152, 40, inT ? '편성 해제' : '편성하기', () => toggleWithFly(k), { bg:inT ? '#2a2140' : '#4a3a63', on:!inT, fs:13 });
   txt('승급 카드는 소환·별 보상(권속 조각)·일일 상자로 모여요', W / 2, 532, 9, '#8a7aa5', 'center');
   txt('레벨 ' + MS_LV.join('·') + '는 스킬, 그 밖의 레벨은 공격·체력 +' + Math.round(LVUP.per * 100) + '%', W / 2, 548, 9, '#8a7aa5', 'center');
 }
@@ -2888,7 +2944,7 @@ function mTrap(m) {
   const y = 418, mx = e >= ENH.max, c = enhCost(e);
   btn(24, y, 152, 48, mx ? '강화 +' + e + ' (최대)' : '강화 +' + e + ' → +' + (e + 1), () => enhance(k), {
     dis:mx || SAVE.gems < c, bg:'#1f3a4a', bc:CUR.gem.col, fs:12, sub:mx ? '최대 단계' : CUR.gem.ico + ' ' + c + '  (보유 ' + SAVE.gems + ')', sc:CUR.gem.col });
-  btn(184, y, 152, 48, inT ? '편성 해제' : '편성하기', () => toggleTeam(k), { bg:inT ? '#2a2140' : '#4a3a63', on:!inT, fs:13 });
+  btn(184, y, 152, 48, inT ? '편성 해제' : '편성하기', () => toggleWithFly(k), { bg:inT ? '#2a2140' : '#4a3a63', on:!inT, fs:13 });
   const refund = Math.floor(enhSpent(e) * RESET_REFUND);
   btn(24, y + 56, W - 48, 40, '강화 초기화', () => {
     M = { k:'confirm', title:'강화 초기화', back:{ k:'trap', key:k },
@@ -4423,6 +4479,7 @@ cv.addEventListener('pointermove', e => {
   if (scene === 'stages' && !M && !L.result && !tutGuiding() && maxMove > TAP_SLOP) { SS.dx += p[0] - prev[0]; }
   if (scene === 'codex' && !M && maxMove > TAP_SLOP) L.dexY = (L.dexY || 0) + prev[1] - p[1];
   if (scene === 'pvp' && !M && maxMove > TAP_SLOP) L.lbY = (L.lbY || 0) + prev[1] - p[1];
+  if (scene === 'lobby' && !M && maxMove > TAP_SLOP && startPt && startPt[1] > 370) L.lobY = (L.lobY || 0) + prev[1] - p[1];
   if (orbiting && maxMove > TAP_SLOP) {
     cam.yaw -= (p[0] - prev[0]) * 0.009;
     cam.pitch = Math.max(0.22, Math.min(1.552, cam.pitch + (p[1] - prev[1]) * 0.006));
