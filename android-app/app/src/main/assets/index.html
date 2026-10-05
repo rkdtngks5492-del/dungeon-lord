@@ -2986,10 +2986,10 @@ function mDepth() {
    관문에 나오는 용사 구성(원거리·힐러·전열 비율, 보스)과 길(병목)을 보고 보유한 권속·함정으로 편성을 고른다 */
 function stageProfile(i) {
   const cnt = { tank:0, melee:0, assassin:0, ranged:0, support:0 };
-  let n = 0, boss = false;
-  if (i !== ENDLESS) { const S = STAGES[i]; for (let w = S.from; w <= S.to; w++) for (const r of WAVES[w]) { const d = DEF[r[0]]; cnt[d.role] += r[1]; n += r[1]; if (d.boss || d.tier === 'hero') boss = true; } }
-  else { cnt.tank = 4; cnt.ranged = 3; cnt.support = 2; n = 9; boss = true; }
-  return { cnt, n:Math.max(1, n), boss, ft:stageFeats(i).F.map(f => f.t) };
+  let n = 0, boss = false, fly = 0;
+  if (i !== ENDLESS) { const S = STAGES[i]; for (let w = S.from; w <= S.to; w++) for (const r of WAVES[w]) { const d = DEF[r[0]]; cnt[d.role] += r[1]; n += r[1]; if (d.fly) fly += r[1]; if (d.boss || d.tier === 'hero') boss = true; } }
+  else { cnt.tank = 4; cnt.ranged = 3; cnt.support = 2; n = 9; boss = true; fly = 1; }
+  return { cnt, n:Math.max(1, n), boss, fly, ft:stageFeats(i).F.map(f => f.t) };
 }
 /* ===== 편성 판단 (덱 화면 '자동 편성' · 관문 '추천 덱' 공용) =====
    P = 관문 정보(stageProfile) 또는 null(일반). 전투력(unitPower) × 관문 맞춤 가중치로 줄을 세우고,
@@ -3002,6 +3002,7 @@ function pickTeam(P) {
     if (back >= 0.25 && (d.role === 'assassin' || d.fly || (d.shot && d.rng >= 110))) f *= 1.3;   /* 뒤에 숨은 원거리·힐러를 잡을 저격형 */
     if (tanky >= 0.3 && (d.aoe || d.dmg / d.cd >= 25)) f *= 1.25;                                 /* 단단한 전열을 녹일 화력 */
     if ((P.boss || P.ft.includes('choke')) && d.role === 'tank') f *= 1.2;                          /* 보스·병목은 전열이 버틴다 */
+    if (P.fly && d.shot) f *= 1.3;                                                                 /* 비행 용사는 원거리만 때릴 수 있다 */
     return f;
   };
   const sc = k => unitPower(k) * fit(k), cap = mSlots();
@@ -3012,10 +3013,13 @@ function pickTeam(P) {
   for (const k of own) if (m.length < cap && m.indexOf(k) < 0 && (DEF[k].role !== 'tank' || m.filter(x => DEF[x].role === 'tank').length < maxTank)) m.push(k);
   for (const k of own) if (m.length < cap && m.indexOf(k) < 0) m.push(k);   /* 다른 역할이 모자라면 남은 자리는 그냥 점수순 */
   m.sort((a, b) => sc(b) - sc(a));
-  const tpow = k => unitPower(k) + (DEF[k].slow ? 40 * (sh('melee') + sh('assassin')) : 0) + (DEF[k].mode === 'zone' || DEF[k].mode === 'periodic' ? 30 : 0);
+  const tpow = k => unitPower(k) + (DEF[k].slow ? 40 * (sh('melee') + sh('assassin')) : 0) + (DEF[k].mode === 'zone' || DEF[k].mode === 'periodic' ? 30 : 0)
+                 + (P && P.fly && DEF[k].antiAir ? 400 : 0) + (P && sh('support') >= 0.15 && DEF[k].silence ? 200 : 0);   /* 관문 맞춤 함정 */
   const t = TRAPSL.filter(k => SAVE.own[k]).sort((a, b) => tpow(b) - tpow(a)).slice(0, tSlots());
   if (P) {
     if (back >= 0.25) why.push('원거리·힐러 ' + Math.round(back * 100) + '% → 저격형 우선');
+    if (P.fly) why.push('비행 용사 ' + P.fly + '명 → 원거리 권속·대공 함정');
+    if (sh('support') >= 0.15) why.push('힐러 ' + P.cnt.support + '명');
     if (tanky >= 0.3) why.push('전열이 많아 광역·고화력');
     if (P.boss) why.push('보스 대비 전열 포함');
     if (P.ft.includes('choke')) why.push('병목에서 버틸 전열');
