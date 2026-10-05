@@ -2795,9 +2795,10 @@ function drawLobby() {
   /* 팀 요약: 총 전투력 · 역할 구성 */
   const pw = SAVE.mteam.reduce((a, k) => a + unitPower(k), 0) + SAVE.tteam.reduce((a, k) => a + unitPower(k), 0);
   const rc = {}; for (const k of SAVE.mteam) rc[DEF[k].role] = (rc[DEF[k].role] || 0) + 1;
-  const roles = ['tank', 'melee', 'assassin', 'ranged', 'support'].filter(r => rc[r]).map(r => ROLE_NAME[r] + ' ' + rc[r]).join(' · ');
+  /* 역할 구성은 아이콘+숫자로 짧게 (자동 편성 버튼과 겹치지 않게, 아이콘은 초상화 카드와 같음): 🛡전열 ⚔근접 🗡암살 🏹원거리 */
+  const roles = ['tank', 'melee', 'assassin', 'ranged', 'support'].filter(r => rc[r]).map(r => ROLE_ICO[r] + rc[r]).join('  ');
   txt('⚔ 전투력 ' + Math.round(pw).toLocaleString('en-US'), 14, 120, 11, '#ffd35a');
-  txt(roles || '편성된 권속이 없어요', 130, 120, 10, '#c9b8ff');
+  txt(roles || '편성된 권속이 없어요', 140, 120, 10, '#c9b8ff');
   if (typeof autoTeamBtn === 'function') autoTeamBtn();
   /* 권속 편성: 큰 초상화 카드 */
   const ms = mSlots(), ts = tSlots();
