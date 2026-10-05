@@ -2990,27 +2990,60 @@ function stageProfile(i) {
   else { cnt.tank = 4; cnt.ranged = 3; cnt.support = 2; n = 9; boss = true; }
   return { cnt, n:Math.max(1, n), boss, ft:stageFeats(i).F.map(f => f.t) };
 }
-function recommendDeck(i) {
-  const P = stageProfile(i), sh = r => P.cnt[r] / P.n, back = sh('ranged') + sh('support'), tanky = sh('tank'), why = [];
-  const pow = k => { const d = DEF[k], m = statMul(k); return d.hp * m.hp / 40 + d.dmg * m.dmg / d.cd * (d.aoe ? 1.4 : 1); };
+/* ===== 편성 판단 (덱 화면 '자동 편성' · 관문 '추천 덱' 공용) =====
+   P = 관문 정보(stageProfile) 또는 null(일반). 전투력(unitPower) × 관문 맞춤 가중치로 줄을 세우고,
+   역할 균형을 먼저 채운다: 전열은 칸의 약 25%(최소 1)~40%, 원거리는 약 35%(최소 1), 나머지는 점수순. */
+function pickTeam(P) {
+  const sh = r => (P ? P.cnt[r] / P.n : 0), back = sh('ranged') + sh('support'), tanky = sh('tank'), why = [];
   const fit = k => {
+    if (!P) return 1;
     const d = DEF[k]; let f = 1;
     if (back >= 0.25 && (d.role === 'assassin' || d.fly || (d.shot && d.rng >= 110))) f *= 1.3;   /* 뒤에 숨은 원거리·힐러를 잡을 저격형 */
     if (tanky >= 0.3 && (d.aoe || d.dmg / d.cd >= 25)) f *= 1.25;                                 /* 단단한 전열을 녹일 화력 */
     if ((P.boss || P.ft.includes('choke')) && d.role === 'tank') f *= 1.2;                          /* 보스·병목은 전열이 버틴다 */
     return f;
   };
-  const own = MINIONS.filter(k => SAVE.own[k]).sort((a, b) => pow(b) * fit(b) - pow(a) * fit(a)), cap = mSlots();
-  const m = own.slice(0, cap);
-  if (!m.some(k => DEF[k].role === 'tank')) { const t = own.find(k => DEF[k].role === 'tank'); if (t) { if (m.length < cap) m.push(t); else m[m.length - 1] = t; } }
-  const tpow = k => { const d = DEF[k]; return (d.dmg || 0) * statMul(k).dmg + (d.stun ? 50 : 0) + (d.slow ? 40 * (1 + sh('melee') + sh('assassin')) : 0) + (d.mode === 'zone' || d.mode === 'periodic' ? 30 : 0); };
+  const sc = k => unitPower(k) * fit(k), cap = mSlots();
+  const own = MINIONS.filter(k => SAVE.own[k]).sort((a, b) => sc(b) - sc(a));
+  const need = { tank:Math.max(1, Math.round(cap * 0.25)), ranged:Math.max(1, Math.round(cap * 0.35)) }, m = [];
+  for (const role of ['tank', 'ranged']) for (const k of own) if (m.length < cap && DEF[k].role === role && m.filter(x => DEF[x].role === role).length < need[role]) m.push(k);
+  const maxTank = Math.max(need.tank, Math.round(cap * 0.4));   /* 전열이 너무 몰리지 않게 (체력이 높아 점수가 잘 나온다) */
+  for (const k of own) if (m.length < cap && m.indexOf(k) < 0 && (DEF[k].role !== 'tank' || m.filter(x => DEF[x].role === 'tank').length < maxTank)) m.push(k);
+  for (const k of own) if (m.length < cap && m.indexOf(k) < 0) m.push(k);   /* 다른 역할이 모자라면 남은 자리는 그냥 점수순 */
+  m.sort((a, b) => sc(b) - sc(a));
+  const tpow = k => unitPower(k) + (DEF[k].slow ? 40 * (sh('melee') + sh('assassin')) : 0) + (DEF[k].mode === 'zone' || DEF[k].mode === 'periodic' ? 30 : 0);
   const t = TRAPSL.filter(k => SAVE.own[k]).sort((a, b) => tpow(b) - tpow(a)).slice(0, tSlots());
-  if (back >= 0.25) why.push('원거리·힐러 ' + Math.round(back * 100) + '% → 저격형 우선');
-  if (tanky >= 0.3) why.push('전열이 많아 광역·고화력');
-  if (P.boss) why.push('보스 대비 전열 포함');
-  if (P.ft.includes('choke')) why.push('병목에서 버틸 전열');
-  if (!why.length) why.push('보유한 권속 중 가장 센 조합');
+  if (P) {
+    if (back >= 0.25) why.push('원거리·힐러 ' + Math.round(back * 100) + '% → 저격형 우선');
+    if (tanky >= 0.3) why.push('전열이 많아 광역·고화력');
+    if (P.boss) why.push('보스 대비 전열 포함');
+    if (P.ft.includes('choke')) why.push('병목에서 버틸 전열');
+  }
+  const rc = {}; for (const k of m) rc[DEF[k].role] = (rc[DEF[k].role] || 0) + 1;
+  why.push('역할 균형: ' + ['tank', 'melee', 'assassin', 'ranged'].filter(r => rc[r]).map(r => ROLE_NAME[r] + ' ' + rc[r]).join(' · '));
   return { m, t, why:why.join(' · ') };
+}
+function recommendDeck(i) { return pickTeam(stageProfile(i)); }
+function autoTeam() { return pickTeam(null); }
+/* 덱 화면 [자동 편성] → 바뀌는 내용 미리보기 */
+function autoTeamBtn() { btn(W - 92, 110, 80, 20, '✨ 자동 편성', () => { M = { k:'autoteam', r:autoTeam() }; }, { bg:'#3a2a56', fs:10, fc:'#ffd35a' }); }
+function mAutoTeam(m) {
+  const r = m.r, outM = SAVE.mteam.filter(k => r.m.indexOf(k) < 0), inM = r.m.filter(k => SAVE.mteam.indexOf(k) < 0);
+  const outT = SAVE.tteam.filter(k => r.t.indexOf(k) < 0), inT = r.t.filter(k => SAVE.tteam.indexOf(k) < 0);
+  const pw = list => Math.round(list.reduce((a, k) => a + unitPower(k), 0));
+  panel(16, 96, W - 32, 500, '✨ 자동 편성 미리보기');
+  wrapLines([r.why], W - 72, 10).forEach((t, j) => txt(t, W / 2, 136 + j * 15, 10, '#ffe9a8', 'center'));
+  txt('전투력 ' + pw(SAVE.mteam.concat(SAVE.tteam)).toLocaleString('en-US') + '  →  ' + pw(r.m.concat(r.t)).toLocaleString('en-US'), W / 2, 172, 12, '#ffd35a', 'center');
+  const row = (y, label, list, col) => {
+    txt(label + ' ' + list.length, 32, y, 10, col);
+    if (!list.length) { txt('없음', 90, y, 10, '#6b5a85'); return; }
+    list.slice(0, 8).forEach((k, j) => unitTile(k, 30 + j * 38, y + 10, 35, 44, false));
+  };
+  if (!outM.length && !inM.length && !outT.length && !inT.length) txt('지금 편성이 이미 가장 좋은 조합이에요', W / 2, 300, 12, '#9ae8b5', 'center');
+  else { row(196, '− 빠지는 권속', outM, '#ff8a8a'); row(262, '+ 들어오는 권속', inM, '#9ae8b5'); row(328, '− 빠지는 함정', outT, '#ff8a8a'); row(394, '+ 들어오는 함정', inT, '#9ae8b5'); }
+  txt('적용하면 ' + SAVE.decks[SAVE.deckI].n + '의 편성이 바뀌어요', W / 2, 470, 9, '#8a7aa5', 'center');
+  btn(40, 490, 130, 46, '적용', () => { applyDeck(r); M = null; }, { bg:'#4a3a63', on:true, fs:14, dis:!r.m.length });
+  btn(W - 170, 490, 130, 46, '취소', () => { M = null; }, { bg:'#2a2140', fs:14 });
 }
 function applyDeck(r) {
   SAVE.mteam.length = 0; SAVE.mteam.push(...r.m); SAVE.tteam.length = 0; SAVE.tteam.push(...r.t); questAdd('deck'); persist();
@@ -3338,7 +3371,7 @@ function panel(x, y, w, h, title) {
 function drawModal() {
   if (!M) return;
   BTN = [];   /* 아래 화면 버튼은 막는다 */
-  ({ trap:mTrap, confirm:mConfirm, depth:mDepth, rec:mRec, tip:mTip, help:mHelp, story:mStory, exit:mExit, stam:mStam, quest:mQuest, att:mAtt, box:mBox, mail:mMail, clear:mClear, unit:mUnit })[M.k](M);
+  ({ autoteam:mAutoTeam, trap:mTrap, confirm:mConfirm, depth:mDepth, rec:mRec, tip:mTip, help:mHelp, story:mStory, exit:mExit, stam:mStam, quest:mQuest, att:mAtt, box:mBox, mail:mMail, clear:mClear, unit:mUnit })[M.k](M);
   BTN.push({ x:0, y:0, w:W, h:H, act:() => {}, label:'팝업 바깥' });
 }
 function mStam(m) {
