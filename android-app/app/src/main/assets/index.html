@@ -436,6 +436,40 @@ const TRAPM = {
     P.push([0, 0.14, 0, 0.84, 0.03, 0.12, '#e0c0ff', 0]); P.push([0, 0.14, 0, 0.84, 0.03, 0.12, '#e0c0ff', 1.05]); P.push([0, 0.14, 0, 0.84, 0.03, 0.12, '#e0c0ff', -1.05]);
     P.push([0, 0.24 + g * 0.1, 0, 0.18, 0.2, 0.18, '#d8a8ff']); return P; },
 };
+Object.assign(TRAPM, {
+  camo() { const P = [[0, 0.03, 0, 0.98, 0.06, 0.98, '#24301c']];
+    for (const o of [[-0.28,-0.28],[0.28,-0.28],[0,0],[-0.28,0.28],[0.28,0.28]]) { P.push([o[0], 0.12, o[1], 0.13, 0.22, 0.13, '#9aa8a0', 0.78]); P.push([o[0] + 0.08, 0.1, o[1] - 0.06, 0.22, 0.16, 0.06, '#5a8a3a', 0.4]); }
+    return P; },
+  decoy() { const g = 0.5 + Math.sin(T * 4) * 0.5;
+    return [[0, 0.03, 0, 0.98, 0.06, 0.98, '#2a2434'], [0, 0.22, 0, 0.62, 0.34, 0.44, '#8a5a2a'], [0, 0.44, 0, 0.66, 0.1, 0.48, '#a87a3a'],
+      [0, 0.3, 0.23, 0.12, 0.14, 0.03, '#ffd35a'], [0.18, 0.56 + g * 0.06, 0, 0.08, 0.08, 0.08, dk('#ffe9a8', 0.7 + g * 0.3)]]; },
+  vine() { const P = [[0, 0.03, 0, 0.98, 0.06, 0.98, '#1a2418']], a = T * 0.6;
+    for (let i = 0; i < 3; i++) P.push([0, 0.1, 0, 0.92, 0.06, 0.1, '#3a7a3a', a + i * 1.05]);
+    for (const o of [[-0.3, 0.2], [0.28, -0.24], [0.05, 0.32]]) P.push([o[0], 0.18, o[1], 0.13, 0.13, 0.13, '#d84a5a']);
+    return P; },
+  mirror() { const g = 0.5 + Math.sin(T * 2.4) * 0.5;
+    return [[0, 0.03, 0, 0.98, 0.06, 0.98, '#2a2434'], [0, 0.45, 0, 0.6, 0.82, 0.04, '#7a8aa8'], [0, 0.45, 0.01, 0.5, 0.72, 0.04, dk('#d8eaff', 0.75 + g * 0.25)],
+      [-0.12, 0.6, 0.03, 0.06, 0.3, 0.02, '#ffffff'], [0, 0.08, 0, 0.3, 0.1, 0.2, '#5a5068']]; },
+  manapil() { const g = 0.5 + Math.sin(T * 3) * 0.3;
+    return [[0, 0.04, 0, 0.9, 0.08, 0.9, '#1c1028'], [0, 0.5, 0, 0.26, 0.9, 0.26, '#2a1f42', 0.78],
+      [0, 1.0, 0, 0.36, 0.14, 0.36, dk('#b06aff', 0.6 + g * 0.4), 0.78], [0, 1.16 + g * 0.08, 0, 0.12, 0.12, 0.12, '#e0c0ff', T]]; },
+  silrune() { const g = 0.5 + Math.sin(T * 3) * 0.3;
+    return [[0, 0.04, 0, 1.0, 0.08, 1.0, '#141a28'], [0, 0.11, 0, 0.86, 0.04, 0.86, dk('#7ab8ff', 0.5 + g * 0.4)],
+      [0, 0.32, 0, 0.32, 0.42, 0.12, '#3a4a6a'], [0, 0.36, 0.07, 0.2, 0.05, 0.02, '#bfe0ff'], [0, 0.36, 0.07, 0.05, 0.26, 0.02, '#bfe0ff']]; },
+  altar() { const f = Math.sin(T * 9) * 0.03;
+    return [[0, 0.04, 0, 1.0, 0.08, 1.0, '#1c1018'], [0, 0.24, 0, 0.6, 0.32, 0.4, '#4a3a3a'], [0, 0.43, 0, 0.7, 0.06, 0.5, '#6a5050'],
+      [-0.22, 0.53, 0, 0.06, 0.14, 0.06, '#f0e0c0'], [0.22, 0.53, 0, 0.06, 0.14, 0.06, '#f0e0c0'],
+      [-0.22, 0.64 + f, 0, 0.05, 0.08, 0.05, '#ff6a6a'], [0.22, 0.64 - f, 0, 0.05, 0.08, 0.05, '#ff6a6a'], [0, 0.52, 0, 0.16, 0.12, 0.14, '#d0c0b0']]; },
+  ballista() { const a = Math.sin(T * 0.8) * 0.4;
+    return [[0, 0.03, 0, 0.98, 0.06, 0.98, '#2a2434'], [0, 0.3, 0, 0.18, 0.5, 0.18, '#6a4a2a'], [0, 0.58, 0, 0.9, 0.08, 0.1, '#8a6a3a', a],
+      [0, 0.62, 0, 0.1, 0.06, 0.74, '#cfd8e4', a], [0, 0.62, 0, 0.12, 0.12, 0.12, '#ffd35a']]; },
+  ceiling() { const g = 0.5 + Math.sin(T * 5) * 0.5;
+    return [[0, 0.03, 0, 0.98, 0.06, 0.98, '#2a2434'], [-0.4, 0.5, 0, 0.12, 1.0, 0.12, '#6a6258'], [0.4, 0.5, 0, 0.12, 1.0, 0.12, '#6a6258'],
+      [0, 1.04, 0, 1.0, 0.14, 0.5, '#8a8275'], [-0.1, 1.2, 0, 0.42, 0.2, 0.3, '#a8a092'], [0.2, 0.95, 0, 0.3, 0.03, 0.04, dk('#ff9a3a', 0.4 + g * 0.6), 0.5]]; },
+  gate() { const g = 0.5 + Math.sin(T * 2) * 0.3;
+    return [[0, 0.03, 0, 0.98, 0.06, 0.98, '#2a2434'], [-0.38, 0.5, 0, 0.14, 1.0, 0.14, '#5a4a3a'], [0.38, 0.5, 0, 0.14, 1.0, 0.14, '#5a4a3a'],
+      [0, 0.98, 0, 0.92, 0.12, 0.16, '#5a4a3a'], [0, 0.46, 0, 0.62, 0.86, 0.05, dk('#c77dff', 0.5 + g * 0.4)]]; },
+});
 TRAPM.toxic = TRAPM.gas; TRAPM.vent = TRAPM.fire; TRAPM.boulder = TRAPM.rock; TRAPM.frost = TRAPM.ice; TRAPM.mine = TRAPM.bolt;
 const CRYSTAL = () => { const g = 0.5 + Math.sin(T * 2) * 0.3;
   return [[0, 0.06, 0, 1.1, 0.12, 1.1, '#2a1f42'], [0, 0.1, 0, 0.78, 0.08, 0.78, dk('#8b5cf6', 0.7), 0.78],
@@ -675,6 +709,27 @@ const DEF = {
             note:'위를 지나는 동안 크게 느려짐 (지속)' },
   mine:   { ico:'💠', side:'D', kind:'trap', rar:'SR', name:'마력 지뢰', dmg:175, rng:92, trig:30, col:'#7ad8ff', stun:0.5, sc:54,
             note:'넓은 범위를 한 번에 날려 버림 (1회)' },
+  /* 2B 카운터 함정: 용사 유형마다 하나씩. unlock = 이 관문을 돌파하면 1장 받고, 그때부터 함정 소환에도 나온다 */
+  camo:   { ico:'🌾', side:'D', kind:'trap', rar:'N', name:'위장 가시', dmg:74, rng:44, trig:30, col:'#8ab85a', hidden:true, unlock:2, sc:54,
+            flav:'눈썰미 좋은 도둑도 못 찾는 가시', note:'좀도둑의 함정 해제에 걸리지 않음 (1회)' },
+  decoy:  { ico:'🎁', side:'D', kind:'trap', rar:'N', name:'미끼 보물상자', dmg:80, rng:64, trig:30, col:'#ffd35a', lure:130, lureMul:3, unlock:3, sc:54,
+            flav:'반짝이는 건 다 내 거라고?', note:'도굴꾼을 끌어들인 뒤 폭발, 도굴꾼에게 3배 피해 (1회)' },
+  vine:   { ico:'🌱', side:'D', kind:'trap', rar:'R', name:'흡혈 덩굴', dmg:12, rng:58, trig:58, col:'#d84a5a', mode:'zone', leech:1, unlock:4, sc:54,
+            flav:'용사의 피는 권속의 양분', note:'범위 안 용사 체력을 흡수해 근처 권속 회복 (지속)' },
+  mirror: { ico:'🪞', side:'D', kind:'trap', rar:'R', name:'거울 결계', dmg:0, rng:72, trig:72, col:'#d8eaff', mode:'zone', reflect:0.4, unlock:5, sc:54,
+            flav:'쏜 화살은 쏜 자에게 돌아간다', note:'범위 안 권속을 노린 원거리 공격의 40%를 반사 (지속)' },
+  manapil:{ ico:'🔮', side:'D', kind:'trap', rar:'R', name:'마력 흡수 기둥', dmg:0, rng:110, trig:110, col:'#b06aff', mode:'zone', drain:0.4, unlock:6, sc:54,
+            flav:'마법사의 힘을 빨아들이는 검은 기둥', note:'범위 안 마법사 계열, 또는 범위 안 권속을 노린 마법 공격 -40% (지속)' },
+  silrune:{ ico:'🔇', side:'D', kind:'trap', rar:'SR', name:'침묵의 룬', dmg:20, rng:84, trig:32, col:'#7ab8ff', silence:5, unlock:7, sc:54,
+            flav:'기도도 노래도 닿지 않는 곳', note:'범위 안 용사의 스킬·회복을 5초간 봉인 (1회)' },
+  altar:  { ico:'🕯️', side:'D', kind:'trap', rar:'SR', name:'저주 제단', dmg:30, rng:76, trig:32, col:'#ff6a6a', vuln:0.25, vulnT:8, unlock:8, sc:54,
+            flav:'아무리 두꺼운 갑옷도 저주는 막지 못한다', note:'지나간 용사가 8초간 받는 피해 +25% (1회)' },
+  ballista:{ ico:'🏹', side:'D', kind:'trap', rar:'SR', name:'대공 쇠뇌', dmg:70, rng:130, trig:120, col:'#cfd8e4', mode:'periodic', period:2.5, antiAir:2, ground:0.5, unlock:9, sc:54,
+            flav:'하늘을 나는 자를 위한 선물', note:'비행 용사를 먼저 쏘고 2배 피해, 땅 위는 절반 (반복)' },
+  ceiling:{ ico:'🧱', side:'D', kind:'trap', rar:'SR', name:'붕괴 천장', dmg:150, rng:84, trig:32, col:'#a8a092', stun:1.0, block:4, unlock:10, sc:54,
+            flav:'한 웨이브에 한 번, 천장이 통째로 무너진다', note:'넓은 큰 피해 + 4초간 길 막힘 (웨이브당 1회)' },
+  gate:   { ico:'🚪', side:'D', kind:'trap', rar:'SSR', name:'갈림길 문', dmg:0, rng:40, trig:34, col:'#c77dff', mode:'periodic', period:30, warp:true, stun:1.0, unlock:12, sc:54,
+            flav:'이 길이 아니었던가?', note:'지나가는 무리를 다른 길로 보냄 (재사용 30초)' },
 
   vagrant:{ ico:'🚶', side:'H', tier:'mob', name:'떠돌이', hp:55, dmg:4, rng:26, cd:1.0, spd:30, rew:2, sc:34,
             art:{ shape:'burly', body:'#b09878', accent:'#6a4a2a', weapon:'dagger', skin:'#f2cba3' } },
@@ -1196,6 +1251,14 @@ function rewardDots() {
 function rewardAny() { const d = rewardDots(); return d.quest || d.att || d.box || d.mail || d.clear; }
 
 function rollRarity() { const r = Math.random() * 100; return r < 1 ? 'SSR' : r < 8 ? 'SR' : r < 35 ? 'R' : 'N'; }
+/* 관문 진행으로 풀리는 함정: unlock 관문을 돌파해야 함정 소환에 나온다 */
+function trapOpen(k) { return !DEF[k].unlock || SAVE.cleared >= DEF[k].unlock; }
+/* 관문을 처음 돌파했을 때 이번에 풀린 함정을 1장씩 준다 */
+function grantUnlockedTraps() {
+  const got = TRAPSL.filter(k => DEF[k].unlock === SAVE.cleared && !SAVE.own[k]);
+  for (const k of got) gainCard(k);
+  if (got.length) { G.newTraps = got; toast('새 함정 해금: ' + got.map(k => DEF[k].name).join(', ')); }
+}
 function pickFrom(pool, rar) { const p = pool.filter(k => DEF[k].rar === rar); return p[Math.floor(Math.random() * p.length)]; }
 /* 카드 한 장 얻기: 처음이면 등록, 권속 중복은 승급 카드, 함정 중복은 레벨 업(최대 5) 후 ◆ 환급 */
 function gainCard(key) {
@@ -1217,7 +1280,7 @@ function showCards(res) {
   setTimeout(() => SFX.reveal(top), 260);
 }
 function doPull(cat, n, free, cost) {
-  const pool = cat === 'minion' ? MINIONS : TRAPSL;
+  const pool = cat === 'minion' ? MINIONS : TRAPSL.filter(trapOpen);
   if (cost === undefined) cost = n === 10 ? PULL_COST[cat].ten : PULL_COST[cat].one;
   /* 무료 소환권: 권속 1회 소환에 먼저 쓴다 */
   if (!free && cat === 'minion' && n === 1 && (SAVE.tickets | 0) > 0) { SAVE.tickets--; free = true; }
@@ -1513,7 +1576,7 @@ function finishBattle() {
     G.bonus = first ? STAGES[G.stage].gems : Math.floor(STAGES[G.stage].gems * 0.35);
     G.first = first;
     G.gems += G.bonus;
-    if (first) SAVE.cleared = Math.min(STAGES.length, G.stage + 1);
+    if (first) { SAVE.cleared = Math.min(STAGES.length, G.stage + 1); grantUnlockedTraps(); }
     /* 별: 남은 수호석 비율로 1~3개 */
     const r = G.stone / G.maxStone;
     G.stars = CLEAR_REWARD.starAt.filter(a => r >= a).length;
@@ -1544,9 +1607,13 @@ const HEAL_RNG = 70;
 const BARD_R = 90, BARD_SPD = 1.2, BARD_AS = 1.18;   /* 바드 주변 용사: 이동 ×1.2, 공격 속도 ×1.18 */
 const SUMMON_T = 9, ROOT_CD = 7, CHAIN_R = 70, BREATH_LEN = 130, DISARM_T = 10;
 const CHILL_AS = 0.6;   /* 둔화된 권속의 공격 속도 */
-const MAGIC_TRAP = { bolt:1, curse:1, mine:1, rift:1 };   /* 마법형 함정: 날아다니는 용사도 맞는다 */
+const MAGIC_TRAP = { bolt:1, curse:1, mine:1, rift:1, ballista:1, silrune:1, altar:1, manapil:1, ceiling:1 };   /* 마법형 함정: 날아다니는 용사도 맞는다 */
 /* 이 함정이 이 용사에게 들어가나: 비행 용사는 바닥형 함정을 무시한다 */
 function trapHits(b, h) { return !h.def.fly || !!MAGIC_TRAP[b.key]; }
+/* 지금 (x,z)를 덮고 있는 f 효과의 함정 (해제돼 멈춘 것은 빼고) */
+function trapAt(f, x, z) { for (const b of G.rooms) if (b && b.def[f] && !(b.disT > 0) && dist2(b.x, b.z, x, z) <= b.def.rng) return b; return null; }
+/* 마법사 계열 = 지팡이를 든 용사 */
+function isMage(h) { return !!(h.def.art && h.def.art.weapon === 'staff'); }
 /* 용사 공격에 붙은 상태 이상 */
 function heroAfflict(h, v) {
   const df = h.def;
@@ -1596,7 +1663,8 @@ function fireTrap(b) {
   const dmg = b.dmg * k;
   b.spent = true; b.flash = 0.6;
   let vic = G.heroes.filter(h => unitSees(b, h) && dist2(h.x, h.z, b.x, b.z) <= d.rng && trapHits(b, h));
-  if (d.single && vic.length) vic = [vic.reduce((a, h) => (dist2(h.x, h.z, b.x, b.z) < dist2(a.x, a.z, b.x, b.z) ? h : a))];
+  if (d.antiAir && vic.length) { const fl = vic.filter(h => h.def.fly); vic = fl.length ? fl : vic; }   /* 대공 쇠뇌: 비행 용사 먼저, 한 명 */
+  if ((d.single || d.antiAir) && vic.length) vic = [vic.reduce((a, h) => (dist2(h.x, h.z, b.x, b.z) < dist2(a.x, a.z, b.x, b.z) ? h : a))];
   fxRing(b.x, b.z, d.rng, d.col, 0.6); burst(b.x, 14, b.z, 24, d.col, 100);
   fxText(b.x, b.z - 8, d.name + '!', d.col);
   sev('trapfire', b, null, dmg, { col:d.col, name:d.name, zone:b.road });
@@ -1605,7 +1673,8 @@ function fireTrap(b) {
   else hitstop(0.04);
   SFX.trap(b.key);
   for (const h of vic) {
-    if (dmg > 0) { const dd = dmgHero(h, dmg); sev('trap', b, h, dd, { col:d.col }); fxText(h.x, h.z, '-' + Math.round(dd), d.col); burst(h.x, 14, h.z, 6, d.col, 55, h.x - b.x, h.z - b.z); knock(h, h.x - b.x, h.z - b.z, 12); }
+    const hm = d.antiAir ? (h.def.fly ? d.antiAir : d.ground) : d.lure && h.def.runner ? d.lureMul : 1;
+    if (dmg > 0) { const dd = dmgHero(h, dmg * hm); sev('trap', b, h, dd, { col:d.col }); fxText(h.x, h.z, '-' + Math.round(dd), d.col); burst(h.x, 14, h.z, 6, d.col, 55, h.x - b.x, h.z - b.z); knock(h, h.x - b.x, h.z - b.z, 12); }
     if (d.stun) h.stun = Math.max(h.stun, d.stun);
     if (d.slow) { h.slow = Math.max(h.slow, d.slowT || 3); h.slowF = d.slow; }
     if (d.dot) { h.dotT = d.dotT; h.dotDps = d.dot * lvm * k; h.dotCol = d.col; }
@@ -1613,6 +1682,21 @@ function fireTrap(b) {
       const nd = Math.max(0, dOfZ(h.road, h.z) - d.push), q = pathPos(h.road, nd);
       h.x = q[0] + h.fx; h.z = q[1]; h.party.d = Math.max(0, h.party.d - d.push);
       fxText(h.x, h.z, '밀려남', '#8be9ff');
+    }
+    if (d.silence) { h.silT = d.silence; fxText(h.x, h.z - 12, '침묵', '#7ab8ff'); }
+    if (d.vuln) { h.vulnT = d.vulnT; h.vulnF = d.vuln; fxText(h.x, h.z - 12, '저주', '#ff6a6a'); }
+  }
+  /* 붕괴 천장: 잠깐 그 자리 길이 막혀 뒤에서 오던 무리가 멈춘다 */
+  if (d.block) (G.blocks = G.blocks || []).push({ road:b.road, z:b.z, x:b.x, t:d.block });
+  /* 갈림길 문: 처음 닿은 용사의 무리를 같은 거리의 다른 길로 보낸다 (보스가 있는 무리와 합류 뒤에는 소용없음) */
+  if (d.warp && vic.length) {
+    const P = vic[0].party, others = [0, 1, 2].filter(r => r !== P.road);
+    if (P.heroes.some(h => h.boss || h.def.boss) || b.road === 3 || P.d >= dOfZ(P.road, MERGE_Z) - 20) fxText(b.x, b.z - 10, '버팀', '#c9c9c9');
+    else {
+      const nr = others[Math.floor(Math.random() * others.length)];
+      P.road = nr; P.d = P.dAvg = Math.min(P.d, dOfZ(nr, MERGE_Z) - 30);
+      for (const h of P.heroes) { h.road = nr; const q = pathPos(nr, Math.max(0, P.d + h.fz)); h.x = q[0] + h.fx; h.z = q[1]; h.tgt = null; burst(h.x, 14, h.z, 10, d.col, 70); }
+      fxText(b.x, b.z - 10, ROAD_NAME[nr] + '로!', d.col);
     }
   }
 }
@@ -1623,7 +1707,7 @@ function punch(v) { if (v > camPunch) camPunch = v; }
 /* 침입자가 받는 피해. 강철 접두는 일부를 흘려낸다 */
 /* spell = 마왕의 주문(포효·운석): 보호막을 무시하고 반드시 들어간다 */
 function dmgHero(h, amt, spell, from) {
-  let d = amt * (1 - (h.dr || 0));
+  let d = amt * (1 - (h.dr || 0)) * (h.vulnT > 0 ? 1 + h.vulnF : 1);
   if (h.def.front && from && from.z > h.z) d *= 1 - h.def.front;   /* 기사: 방패로 정면 공격을 막는다 */
   if (h.shield > 0 && !spell) { const a = Math.min(h.shield, d); h.shield -= a; d -= a; }
   h.hp -= d; h.hitT = 1; return d;
@@ -1724,7 +1808,7 @@ function petrifyEnd(b) {
 }
 /* 보스 고유 능력: 일정 시간마다 저절로 쓴다 */
 function bossTick(h, dt) {
-  h.skT -= dt; if (h.skT > 0 || h.stun > 0) return;
+  h.skT -= dt; if (h.skT > 0 || h.stun > 0 || h.silT > 0) return;
   const sk = h.def.skill, mates = G.heroes.filter(o => o.party === h.party);
   const note = (col) => { fxRing(h.x, h.z, 120, col, 0.8); fxText(h.x, h.z - 10, h.def.skname + '!', col); say(h.def.name + '의 ' + h.def.skname + '!'); SFX.roar(); sev('bossskill', h, null, 0, { col, name:h.def.skname }); };
   if (sk === 'rally') {
@@ -2038,10 +2122,11 @@ function update(dt) {
   G.parties = G.parties.filter(P => P.live > 0);
 
   for (const h of G.heroes) h.aura = false;
-  for (const bd of G.heroes) if (bd.def.aura && bd.hp > 0) for (const o of G.heroes) if (o !== bd && sameLane(bd, o) && dist2(bd.x, bd.z, o.x, o.z) <= BARD_R) o.aura = true;
+  for (const bd of G.heroes) if (bd.def.aura && bd.hp > 0 && !(bd.silT > 0)) for (const o of G.heroes) if (o !== bd && sameLane(bd, o) && dist2(bd.x, bd.z, o.x, o.z) <= BARD_R) o.aura = true;
   for (const h of G.heroes) {
     const df = h.def, P = h.party;
     if (h.slow > 0) h.slow -= dt;
+    if (h.silT > 0) h.silT -= dt; if (h.vulnT > 0) h.vulnT -= dt; if (h.weakT > 0) h.weakT -= dt;
     const kd = Math.exp(-dt * 11);
     if (h.kbx) h.kbx *= kd; if (h.kbz) h.kbz *= kd;
     if (h.atk > 0) h.atk -= dt * 3.1;
@@ -2096,9 +2181,9 @@ function update(dt) {
     h.fighting = false;
     let acted = false;
     /* 지원: 체력이 낮은 아군만 고친다. 걸으면서 고치므로 멈춰 서지 않고, 지원 때문에 무리가 멈추지도 않는다 */
-    if (df.heal && G.waveT < 210) {
+    if (df.heal && G.waveT < 210 && !(h.silT > 0)) {
       let al = null, br = HEAL_AT;
-      for (const o of G.heroes) { const r = o.hp / o.maxHp; if (o.hp > 0 && r < br && sameLane(h, o) && dist2(h.x, h.z, o.x, o.z) <= HEAL_RNG) { br = r; al = o; } }
+      for (const o of G.heroes) { const r = o.hp / o.maxHp; if (o.hp > 0 && !(o.silT > 0) && r < br && sameLane(h, o) && dist2(h.x, h.z, o.x, o.z) <= HEAL_RNG) { br = r; al = o; } }
       h.healing = !!al;
       if (al) {
         h.tgt = al;
@@ -2122,11 +2207,15 @@ function update(dt) {
           const vic = df.aoe ? G.rooms.filter(b => b && b.def.kind === 'minion' && dist2(b.x, b.z, tg.x, tg.z) < 52) : [tg];
           const big = h.dmg >= 16;
           for (const v of vic) {
-            const c = v.markT > 0 && v.markBy !== h, amt = h.dmg * (c ? COMBO : 1) * (h.buffT > 0 ? 1.3 : 1) * (df.slayer || 1) * (df.berserk ? 1 + (1 - h.hp / h.maxHp) : 1);
+            const c = v.markT > 0 && v.markBy !== h, amt = h.dmg * (c ? COMBO : 1) * (h.buffT > 0 ? 1.3 : 1) * (df.slayer || 1) * (df.berserk ? 1 + (1 - h.hp / h.maxHp) : 1) * (h.weakT > 0 ? 1 - h.weakF : 1);
+            /* 마력 흡수 기둥: 멀리서 쏘는 마법사도, 기둥 범위 안의 권속을 노리면 약해진다 */
+            const mw = !(h.weakT > 0) && isMage(h) && trapAt('drain', v.x, v.z);
+            const mr = df.shot && trapAt('reflect', v.x, v.z);
+            if (mr) { const back = dmgHero(h, amt * mr.def.reflect * statMul(mr.key).dmg); fxShot(v.x, v.z, h.x, h.z, mr.def.col); fxText(h.x, h.z - 10, '반사 -' + Math.round(back), mr.def.col); }
             v.markT = 0.8; v.markBy = h;
             v.aggro = h; v.aggroT = AGGRO_T; v.tgt = h; v.engT = 2;   /* 맞은 권속은 때린 침입자에게 바로 반격한다 */
             if (h.z < G.defLine && v.def.spd) v.breakT = BREAK_T;     /* 방어 라인 밖에서 때렸으면 기다리지 않고 넘어가 쫓는다 */
-            const am = dmgMinion(v, amt, df.pierce || 0);
+            const am = dmgMinion(v, amt * (mr ? 1 - mr.def.reflect : 1) * (mw ? 1 - mw.def.drain : 1), df.pierce || 0);
             heroAfflict(h, v);
             fxText(v.x, v.z, (c ? '연계 ' : '') + (am ? '-' + Math.round(am) : '무적'), c ? '#ffe36b' : '#ff6b6b');
             sev('hit', h, v, am, { shot:!!df.shot, combo:c, col:df.shot ? '#ffd35a' : '#ff6b6b' });
@@ -2185,8 +2274,11 @@ function update(dt) {
     }
   }
   /* 싸움이 끝나면 대형을 그 자리에서 다시 짜서 행군을 이어 간다 */
+  if (G.blocks) { for (const k of G.blocks) k.t -= dt; G.blocks = G.blocks.filter(k => k.t > 0); }
   if (G.seal <= 0) for (const P of G.parties) {
+    const d0 = P.d;
     if (P.fight) P.d = P.dAvg; else P.d = Math.min(ROADS[P.road].len + 44, P.d + P.sp * CRUISE * dt);
+    if (G.blocks) for (const k of G.blocks) if (k.road === 3 || k.road === P.road) { const bd = dOfZ(P.road, k.z) - 26; if (d0 <= bd && P.d > bd) P.d = bd; }
   }
 
   /* ===== 권속: 같은 길의 침입자를 마중 나가 막는다 ===== */
@@ -2316,7 +2408,7 @@ function update(dt) {
     if (b.disT > 0) { b.disT -= dt; continue; }   /* 좀도둑에게 해제된 지속·주기형 함정은 잠깐 멈춘다 */
     const inside = G.heroes.filter(h => unitSees(b, h) && dist2(h.x, h.z, b.x, b.z) <= trg && trapHits(b, h));
     /* 좀도둑: 함정에 닿으면 확률로 해제한다 (함정마다 한 번만 시도) */
-    const th = !b.spent && inside.find(h => h.def.disarm && !(h.tried || (h.tried = new Set())).has(b));
+    const th = !b.spent && !b.def.hidden && inside.find(h => h.def.disarm && !(h.tried || (h.tried = new Set())).has(b));
     if (th) {
       th.tried.add(b);
       if (Math.random() < th.def.disarm) {
@@ -2330,6 +2422,12 @@ function update(dt) {
       for (const h of inside) {
         if (b.dmg > 0) { h.dotT = Math.max(h.dotT, 0.4); h.dotDps = b.dmg * (0.6 + 0.4 * waveMul()); h.dotCol = b.def.col; }
         if (b.def.slow) { h.slow = Math.max(h.slow, 0.4); h.slowF = b.def.slow; }
+        if (b.def.drain && isMage(h)) { h.weakT = 0.4; h.weakF = b.def.drain; }
+      }
+      /* 흡혈 덩굴: 빨아들인 만큼 근처에서 가장 다친 권속을 고친다 */
+      if (b.def.leech && inside.length) {
+        let al = null; for (const o of G.rooms) if (o && o.def.kind === 'minion' && o.hp > 0 && o.hp < o.maxHp && dist2(o.x, o.z, b.x, b.z) <= 130 && (!al || o.hp / o.maxHp < al.hp / al.maxHp)) al = o;
+        if (al) { al.hp = Math.min(al.maxHp, al.hp + b.dmg * (0.6 + 0.4 * waveMul()) * inside.length * b.def.leech * dt); if ((b.fxT || 0) <= 0.05) fxShot(b.x, b.z, al.x, al.z, b.def.col); }
       }
       b.fxT = (b.fxT || 0) - dt;
       if (inside.length && b.fxT <= 0) { b.fxT = 0.7; fxRing(b.x, b.z, b.def.rng, b.def.col, 0.6); }
@@ -2339,6 +2437,11 @@ function update(dt) {
       b.cd = (b.cd || 0) - dt;
       if (inside.length && b.cd <= 0) { fireTrap(b); b.spent = false; b.cd = b.def.period; }
       continue;
+    }
+    /* 미끼 보물상자: 멀리서도 도굴꾼을 끌어당겨 품에 안고 터진다 */
+    if (b.def.lure && !b.spent) {
+      const lr = G.heroes.filter(h => h.def.runner && h.hp > 0 && unitSees(b, h) && dist2(h.x, h.z, b.x, b.z) <= b.def.lure);
+      if (lr.length) { for (const h of lr) { fxShot(h.x, h.z, b.x, b.z, b.def.col); h.x = b.x + (Math.random() - 0.5) * 14; h.z = b.z + (Math.random() - 0.5) * 14; } fireTrap(b); continue; }
     }
     if (!b.spent && inside.length) fireTrap(b);
   }
@@ -2937,9 +3040,10 @@ function mTrap(m) {
   const k = m.key, d = DEF[k], e = enhLv(k), sm = statMul(k), inT = SAVE.tteam.indexOf(k) >= 0;
   detailHead(k, [['Lv.' + (SAVE.own[k] || 1) + ' / ' + MAX_LV + '  (중복으로 레벨 업)', '#fff', 11], ['강화 +' + e + ' / +' + ENH.max, CUR.gem.col, 12]]);
   const mode = d.mode === 'zone' ? '지속' : d.mode === 'periodic' ? (d.period || 0) + '초마다' : '1회';
-  statBoxes(222, [['피해', d.dmg ? Math.round(d.dmg * sm.dmg) : '-'], ['범위', d.rng], ['발동', mode], ['효과', d.stun ? '기절' : d.slow ? '둔화' : d.push ? '밀기' : '-']]);
+  statBoxes(222, [['피해', d.dmg ? Math.round(d.dmg * sm.dmg) : '-'], ['범위', d.rng], ['발동', mode], ['효과', d.antiAir ? '대공' : d.silence ? '침묵' : d.reflect ? '반사' : d.drain ? '마력 흡수' : d.hidden ? '은신' : d.lure ? '유인' : d.warp ? '길 바꿈' : d.vuln ? '저주' : d.leech ? '흡혈' : d.block ? '길 막힘' : d.stun ? '기절' : d.slow ? '둔화' : d.push ? '밀기' : '-']]);
   ctx.fillStyle = '#1c1628'; rbox(24, 274, W - 48, 70, 8); ctx.fill();
-  txt('함정은 침입자가 밟으면 발동해요. 함정 전용 칸(붉은 칸)에도 놓을 수 있어요.', 34, 292, 9, '#c9b8ff');
+  txt(d.flav ? '“' + d.flav + '”' : '함정은 침입자가 밟으면 발동해요. 함정 전용 칸(붉은 칸)에도 놓을 수 있어요.', 34, 292, d.flav ? 10 : 9, d.flav ? '#ffe9a8' : '#c9b8ff');
+  if (!SAVE.own[k] && !trapOpen(k)) txt('🔒 제' + d.unlock + '관문을 돌파하면 1장 받고, 그 뒤로 함정 소환에도 나와요', W / 2, 362, 10, '#ffb37a', 'center');
   txt('강화 한 단계마다 피해 +' + Math.round(ENH.per * 100) + '% · 같은 함정 카드를 또 얻으면 레벨 업', 34, 310, 9, '#c9b8ff');
   txt('레벨 ' + MAX_LV + '를 넘은 중복 카드는 ' + CUR.gem.ico + '로 환급돼요', 34, 328, 9, '#8a7aa5');
   const y = 418, mx = e >= ENH.max, c = enhCost(e);
@@ -3799,6 +3903,7 @@ function drawScene() {
       plQ.push([b.def.ico, b.x, 9, b.z, RAR_COL[b.def.rar], -1, b.def.sc * 0.9, 2]);
     }
   }
+  if (G.blocks) for (const k of G.blocks) drawModel(TRAPM.rock(), k.x, 9, k.z, 46, 0);   /* 무너진 천장 잔해 */
   for (const h of G.heroes) {
     const P = pose(h, 9);
     const hx = h.x + Math.sin(h.yaw) * P.push + P.shk + P.kx, hz = h.z + Math.cos(h.yaw) * P.push + P.kz;
