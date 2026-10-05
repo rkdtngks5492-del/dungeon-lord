@@ -22,8 +22,6 @@ import com.google.android.gms.ads.AdRequest;
 import com.google.android.gms.ads.FullScreenContentCallback;
 import com.google.android.gms.ads.LoadAdError;
 import com.google.android.gms.ads.MobileAds;
-import com.google.android.gms.ads.interstitial.InterstitialAd;
-import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
 import com.google.android.gms.games.LeaderboardsClient;
@@ -42,11 +40,9 @@ public class MainActivity extends AppCompatActivity {
        출시 전 애드몹에서 만든 본인 단위 ID로 바꾸세요.
        개발 중에 실제 단위로 본인이 광고를 누르면 계정이 정지될 수 있습니다. */
     private static final String REWARDED_UNIT     = "ca-app-pub-3940256099942544/5224354917";
-    private static final String INTERSTITIAL_UNIT = "ca-app-pub-3940256099942544/1033173712";
 
     private WebView web;
     private RewardedAd rewarded;
-    private InterstitialAd interstitial;
     private boolean earned = false;
     /* 광고가 떠 있는 동안에는 뒤로 가기·백그라운드 신호를 게임에 보내지 않는다 */
     private boolean adShowing = false;
@@ -62,7 +58,6 @@ public class MainActivity extends AppCompatActivity {
 
         MobileAds.initialize(this, status -> { });
         loadRewarded();
-        loadInterstitial();
 
         web = new WebView(this);
         WebSettings s = web.getSettings();
@@ -128,14 +123,6 @@ public class MainActivity extends AppCompatActivity {
                 });
     }
 
-    private void loadInterstitial() {
-        InterstitialAd.load(this, INTERSTITIAL_UNIT, new AdRequest.Builder().build(),
-                new InterstitialAdLoadCallback() {
-                    @Override public void onAdLoaded(@NonNull InterstitialAd ad) { interstitial = ad; }
-                    @Override public void onAdFailedToLoad(@NonNull LoadAdError e) { interstitial = null; }
-                });
-    }
-
     /* 자바스크립트로 결과를 돌려준다. 게임 쪽 window.onAdResult(boolean)가 받는다 */
     private void replyToGame(final boolean ok) {
         web.post(() -> web.evaluateJavascript("window.onAdResult(" + ok + ")", null));
@@ -163,23 +150,6 @@ public class MainActivity extends AppCompatActivity {
                     }
                 });
                 rewarded.show(MainActivity.this, r -> earned = true);
-            });
-        }
-
-        @JavascriptInterface
-        public void showInterstitial() {
-            runOnUiThread(() -> {
-                if (interstitial == null) { loadInterstitial(); return; }
-                adShowing = true;
-                interstitial.setFullScreenContentCallback(new FullScreenContentCallback() {
-                    @Override public void onAdDismissedFullScreenContent() {
-                        adShowing = false; interstitial = null; loadInterstitial();
-                    }
-                    @Override public void onAdFailedToShowFullScreenContent(@NonNull AdError e) {
-                        adShowing = false; interstitial = null; loadInterstitial();
-                    }
-                });
-                interstitial.show(MainActivity.this);
             });
         }
     }
