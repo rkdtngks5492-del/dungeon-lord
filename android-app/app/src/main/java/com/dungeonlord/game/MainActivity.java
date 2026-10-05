@@ -26,6 +26,15 @@ import com.google.android.gms.ads.interstitial.InterstitialAd;
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback;
 import com.google.android.gms.ads.rewarded.RewardedAd;
 import com.google.android.gms.ads.rewarded.RewardedAdLoadCallback;
+import com.google.android.gms.games.LeaderboardsClient;
+import com.google.android.gms.games.PlayGames;
+import com.google.android.gms.games.PlayGamesSdk;
+import com.google.android.gms.games.leaderboard.LeaderboardScore;
+import com.google.android.gms.games.leaderboard.LeaderboardScoreBuffer;
+import com.google.android.gms.games.leaderboard.LeaderboardVariant;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -41,6 +50,9 @@ public class MainActivity extends AppCompatActivity {
     private boolean earned = false;
     /* 광고가 떠 있는 동안에는 뒤로 가기·백그라운드 신호를 게임에 보내지 않는다 */
     private boolean adShowing = false;
+    /* 구글 플레이 게임즈: res/values/games.xml에 앱 ID와 리더보드 ID가 둘 다 있을 때만 켠다 */
+    private boolean gamesOn = false, signedIn = false;
+    private String leaderboardId = "";
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -65,12 +77,14 @@ public class MainActivity extends AppCompatActivity {
         web.setWebChromeClient(new WebChromeClient());
         web.addJavascriptInterface(new AdBridge(), "AndroidAds");
         web.addJavascriptInterface(new AppBridge(), "AndroidApp");
+        web.addJavascriptInterface(new GamesBridge(), "AndroidGames");
         /* TODO: 결제 연동을 마치면 아래 줄의 주석을 푼다. 그 전에는 게임이 "Play 스토어 등록 후 열려요"라고 안내한다 */
         // web.addJavascriptInterface(new BillingBridge(), "AndroidBilling");
         web.loadUrl("file:///android_asset/index.html");
         setContentView(web);
 
         hideSystemBars();
+        initGames();
 
         /* 뒤로 가기는 게임(window.onBack)이 처리한다: 팝업 닫기 · 일시정지 · 탭 이동 · 종료 확인 */
         getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
@@ -183,6 +197,85 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface
         public void buy(String productId) {
             runOnUiThread(() -> replyPurchase(productId, false));
+        }
+    }
+
+    /* ---------- 구글 플레이 게임즈 (경쟁전 · 관문 랭킹) ---------- */
+    private void initGames() {
+        String appId = getString(R.string.game_services_project_id).trim();
+        leaderboardId = getString(R.string.leaderboard_stage_rank).trim();
+        if (appId.isEmpty() || leaderboardId.isEmpty()) return;   /* 아직 설정 전: 게임은 더미 데이터로 경쟁전을 그린다 */
+        gamesOn = true;
+        PlayGamesSdk.initialize(this);
+        PlayGames.getGamesSignInClient(this).isAuthenticated().addOnCompleteListener(t -> {
+            signedIn = t.isSuccessful() && t.getResult().isAuthenticated();
+            js("window.onGamesSignIn && window.onGamesSignIn(" + signedIn + ")");
+        });
+    }
+
+    private void js(final String code) {
+        web.post(() -> web.evaluateJavascript(code, null));
+    }
+
+    public class GamesBridge {
+        @JavascriptInterface public boolean isConfigured() { return gamesOn; }
+        @JavascriptInterface public boolean isSignedIn() { return signedIn; }
+
+        @JavascriptInterface
+        public void signIn() {
+            if (!gamesOn) return;
+            runOnUiThread(() -> PlayGames.getGamesSignInClient(MainActivity.this).signIn().addOnCompleteListener(t -> {
+                signedIn = t.isSuccessful() && t.getResult().isAuthenticated();
+                js("window.onGamesSignIn && window.onGamesSignIn(" + signedIn + ")");
+            }));
+        }
+
+        /* 점수는 게임이 '오를 때만' 보낸다. 리더보드도 더 높은 점수만 남긴다 */
+        @JavascriptInterface
+        public void submit(String score) {
+            if (!gamesOn || !signedIn) return;
+            final long v;
+            try { v = Long.parseLong(score); } catch (NumberFormatException e) { return; }
+            runOnUiThread(() -> PlayGames.getLeaderboardsClient(MainActivity.this).submitScore(leaderboardId, v));
+        }
+
+        /* 상위 100명 + 내 순위. span = "all"(전체) 또는 "week"(이번 주) → window.onLeaderboard(span, json) */
+        @JavascriptInterface
+        public void load(final String span) {
+            if (!gamesOn) return;
+            final int ts = "week".equals(span) ? LeaderboardVariant.TIME_SPAN_WEEKLY : LeaderboardVariant.TIME_SPAN_ALL_TIME;
+            runOnUiThread(() -> {
+                final LeaderboardsClient lc = PlayGames.getLeaderboardsClient(MainActivity.this);
+                final JSONObject out = new JSONObject();
+                lc.loadTopScores(leaderboardId, ts, LeaderboardVariant.COLLECTION_PUBLIC, 100).addOnCompleteListener(top -> {
+                    JSONArray rows = new JSONArray();
+                    try {
+                        if (top.isSuccessful() && top.getResult().get() != null) {
+                            LeaderboardsClient.LeaderboardScores ls = top.getResult().get();
+                            LeaderboardScoreBuffer buf = ls.getScores();
+                            for (LeaderboardScore sc : buf) {
+                                JSONObject r = new JSONObject();
+                                r.put("rank", sc.getRank()); r.put("name", sc.getScoreHolderDisplayName());
+                                r.put("score", sc.getRawScore()); r.put("t", sc.getTimestampMillis());
+                                rows.put(r);
+                            }
+                            buf.release(); ls.release();
+                        }
+                        out.put("rows", rows);
+                    } catch (Exception ignored) { }
+                    lc.loadCurrentPlayerLeaderboardScore(leaderboardId, ts, LeaderboardVariant.COLLECTION_PUBLIC).addOnCompleteListener(mine -> {
+                        try {
+                            if (mine.isSuccessful() && mine.getResult().get() != null) {
+                                LeaderboardScore m = mine.getResult().get();
+                                JSONObject me = new JSONObject();
+                                me.put("rank", m.getRank()); me.put("name", m.getScoreHolderDisplayName()); me.put("score", m.getRawScore()); me.put("me", true);
+                                out.put("me", me);
+                            }
+                        } catch (Exception ignored) { }
+                        js("window.onLeaderboard(" + JSONObject.quote(span) + "," + JSONObject.quote(out.toString()) + ")");
+                    });
+                });
+            });
         }
     }
 

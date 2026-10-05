@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 구글 플레이 게임즈 설정. Play Console에서 만든 값을 넣으세요 (다운로드 폴더 leaderboard-setup.txt 참고).
+     둘 중 하나라도 비어 있으면 플레이 게임즈를 쓰지 않고, 경쟁전 화면은 테스트용 더미 데이터를 보여 줍니다. -->
+<resources>
+    <!-- Play 게임즈 서비스 > 설정 > 프로젝트 ID (숫자만, 예: 123456789012) -->
+    <string name="game_services_project_id" translatable="false"></string>
+    <!-- 리더보드 '관문 랭킹'의 ID (예: CgkI...EAIQAQ) -->
+    <string name="leaderboard_stage_rank" translatable="false"></string>
+</resources>
