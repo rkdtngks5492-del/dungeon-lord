@@ -808,6 +808,10 @@ const GRADE_ORD = { mob:0, mid:1, hero:2 };
 CODEX.hero.keys = Object.keys(DEF).filter(k => DEF[k].side === 'H' && !DEF[k].boss && !DEF[k].summon)
   .map((k, i) => [k, i]).sort((a, b) => GRADE_ORD[GRADE_OF[a[0]] || 'mob'] - GRADE_ORD[GRADE_OF[b[0]] || 'mob'] || a[1] - b[1]).map(e => e[0]);
 const RAR_RANK = { N:0, R:1, SR:2, SSR:3 };
+/* 권속·함정 도감 목록: 정의에서 자동으로, 등급순(일반 → 희귀 → 영웅 → 전설), 같은 등급은 정의 순서 */
+const byRar = list => list.map((k, i) => [k, i]).sort((a, b) => RAR_RANK[DEF[a[0]].rar] - RAR_RANK[DEF[b[0]].rar] || a[1] - b[1]).map(e => e[0]);
+CODEX.minion.keys = byRar(MINIONS);
+CODEX.trap.keys = byRar(TRAPSL);
 const TIER_COL  = { mob:'#9aa0a6', knight:'#8be9ff', hero:'#ffd35a', boss:'#ff7a3a' };
 const MAX_LV = 5, MSLOT_MAX = 10, TSLOT_MAX = 8;
 /* 권속·함정 칸은 관문을 깰수록 늘어난다. 인덱스 = 돌파한 관문 수 */
