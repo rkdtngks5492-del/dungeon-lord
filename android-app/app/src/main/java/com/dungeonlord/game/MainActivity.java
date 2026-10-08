@@ -34,9 +34,13 @@ import com.google.android.play.core.review.ReviewInfo;
 import com.google.android.play.core.review.ReviewManager;
 import com.google.android.play.core.review.ReviewManagerFactory;
 import com.google.android.gms.tasks.Task;
+import com.google.firebase.analytics.FirebaseAnalytics;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.json.JSONException;
+
+import java.util.Iterator;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -53,6 +57,7 @@ public class MainActivity extends AppCompatActivity {
     /* 구글 플레이 게임즈: res/values/games.xml에 앱 ID와 리더보드 ID가 둘 다 있을 때만 켠다 */
     private boolean gamesOn = false, signedIn = false;
     private String leaderboardId = "";
+    private FirebaseAnalytics firebaseAnalytics;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -60,6 +65,7 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(saved);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
+        firebaseAnalytics = FirebaseAnalytics.getInstance(this);
         MobileAds.initialize(this, status -> { });
         loadRewarded();
 
@@ -77,6 +83,7 @@ public class MainActivity extends AppCompatActivity {
         web.addJavascriptInterface(new AdBridge(), "AndroidAds");
         web.addJavascriptInterface(new AppBridge(), "AndroidApp");
         web.addJavascriptInterface(new GamesBridge(), "AndroidGames");
+        web.addJavascriptInterface(new AnalyticsBridge(), "AndroidAnalytics");
         /* TODO: 결제 연동을 마치면 아래 줄의 주석을 푼다. 그 전에는 게임이 "Play 스토어 등록 후 열려요"라고 안내한다 */
         // web.addJavascriptInterface(new BillingBridge(), "AndroidBilling");
         web.loadUrl("file:///android_asset/index.html");
@@ -250,6 +257,26 @@ public class MainActivity extends AppCompatActivity {
                     });
                 });
             });
+        }
+    }
+
+    /* ---------- Firebase Analytics 창구 ---------- */
+    public class AnalyticsBridge {
+        @JavascriptInterface
+        public void logEvent(String name, String paramsJson) {
+            try {
+                android.os.Bundle bundle = new android.os.Bundle();
+                JSONObject obj = new JSONObject(paramsJson);
+                Iterator<String> keys = obj.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    Object val = obj.get(key);
+                    if (val instanceof Integer || val instanceof Long) bundle.putLong(key, ((Number) val).longValue());
+                    else if (val instanceof Double || val instanceof Float) bundle.putDouble(key, ((Number) val).doubleValue());
+                    else bundle.putString(key, val.toString());
+                }
+                firebaseAnalytics.logEvent(name, bundle);
+            } catch (JSONException ignored) {}
         }
     }
 

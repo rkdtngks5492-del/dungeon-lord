@@ -1134,7 +1134,7 @@ function linkDeck(s) {
   const d = s.decks[s.deckI]; s.mteam = d.m; s.tteam = d.t;
   return s;
 }
-function selectDeck(i) { SAVE.deckI = i; linkDeck(SAVE); persist(); }
+function selectDeck(i) { SAVE.deckI = i; linkDeck(SAVE); persist(); Analytics.log('deck_change', { deck_id: i }); }
 let SAVE = loadSave();
 function persist() { try { SAVE.lastSeen = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); } catch (e) {} }
 const CP_KEY = SAVE_KEY + '_cp';
@@ -1708,6 +1708,7 @@ function startBattle(i) {
   if (stamNow() < STAM.cost) { M = { k:'stam', then:i }; return; }
   SAVE.stam -= STAM.cost; persist(); M = null;
   buildMap(layoutFor(i, 1)); reset(i); scene = 'game'; camSnap('prep'); segIntro(i);
+  G.battleT = Date.now(); Analytics.log('stage_start', { stage_id: i });
 }
 function finishBattle() {
   if (G.done) return; G.done = true;
@@ -2633,10 +2634,10 @@ function update(dt) {
   }
   G.heroes = G.heroes.filter(h => h.hp > 0);
 
-  if (G.stone <= 0) { G.stone = 0; G.phase = 'lose'; shake = 18; punch(50); finishBattle(); SFX.lose(); buzz(300, true); return; }
+  if (G.stone <= 0) { G.stone = 0; G.phase = 'lose'; shake = 18; punch(50); Analytics.log('stage_fail', { stage_id: G.stage, wave: G.wIdx + 1 }); finishBattle(); SFX.lose(); buzz(300, true); return; }
   if (!G.pending.length && !G.heroes.length) {
     G.gems += WAVE_GEMS;
-    if (!G.endless && G.wIdx >= waveCount() - 1) { G.phase = 'win'; finishBattle(); SFX.win(); }
+    if (!G.endless && G.wIdx >= waveCount() - 1) { G.phase = 'win'; Analytics.log('stage_clear', { stage_id: G.stage, duration_sec: Math.round((Date.now() - (G.battleT || 0)) / 1000) }); finishBattle(); SFX.win(); }
     else {
       G.wIdx++; G.phase = 'prep';
       for (const r of G.revive) if (!G.rooms[r.i]) {
@@ -2665,11 +2666,19 @@ function update(dt) {
    덕분에 앱으로 싸기 전에도 광고 동선을 그대로 테스트할 수 있다. */
 /* 광고 보상 횟수·양은 data/currency.js */
 
+/* ================= 분석 이벤트 ================= */
+const Analytics = {
+  log(name, params) {
+    try { if (window.AndroidAnalytics) window.AndroidAnalytics.logEvent(name, JSON.stringify(params || {})); } catch(e) {}
+  }
+};
+
 /* ================= 결제 (자리만) =================
    Play Console에 인앱 상품을 등록한 뒤 MainActivity의 BillingBridge에서 Google Play Billing을 연결하면 된다.
    네이티브가 결제를 끝내면 window.onPurchaseResult(상품ID, 성공여부)를 부른다. */
 const BILLING = {
   buy(id) {
+    Analytics.log('iap_view', { item_id: id });
     const b = window.AndroidBilling;
     if (b && typeof b.buy === 'function') { try { b.buy(id); } catch (e) { toast('결제를 열 수 없어요'); } return; }
     toast('결제는 Play 스토어 등록 후 열려요');
