@@ -30,6 +30,10 @@ import com.google.android.gms.games.PlayGamesSdk;
 import com.google.android.gms.games.leaderboard.LeaderboardScore;
 import com.google.android.gms.games.leaderboard.LeaderboardScoreBuffer;
 import com.google.android.gms.games.leaderboard.LeaderboardVariant;
+import com.google.android.play.core.review.ReviewInfo;
+import com.google.android.play.core.review.ReviewManager;
+import com.google.android.play.core.review.ReviewManagerFactory;
+import com.google.android.gms.tasks.Task;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -258,6 +262,17 @@ public class MainActivity extends AppCompatActivity {
         /* 게임의 "게임을 종료할까요?"에서 종료를 누르면 */
         @JavascriptInterface
         public void exit() { runOnUiThread(MainActivity.this::finish); }
+
+        @JavascriptInterface
+        public void requestReview() {
+            ReviewManager manager = ReviewManagerFactory.create(MainActivity.this);
+            Task<ReviewInfo> request = manager.requestReviewFlow();
+            request.addOnCompleteListener(task -> {
+                if (!task.isSuccessful()) return;
+                ReviewInfo info = task.getResult();
+                runOnUiThread(() -> manager.launchReviewFlow(MainActivity.this, info));
+            });
+        }
 
         @JavascriptInterface
         public void vibrate(int ms) {

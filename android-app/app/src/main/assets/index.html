@@ -1088,6 +1088,8 @@ function defaultSave() {
            tut:{ s:0, seen:{}, got:false }, tickets:0, segSeen:[],
            /* 방치 보상: 마지막 접속 시각, 첫 설치 시각 */
            lastSeen:0, installT:0,
+           /* 리뷰: 요청 완료 플래그 */
+           reviewAsked:false,
            /* 경쟁전: 관문별 남은 수호석 최고 %, 마지막으로 제출한 점수, 첫 실행 제출 여부 */
            stoneBest:{}, rankSent:0, rankInit:false,
            /* 덱 1·2·3: mteam/tteam은 지금 고른 덱의 배열을 그대로 가리킨다 (linkDeck) */
@@ -1733,7 +1735,15 @@ function finishBattle() {
     questAdd('clear');
   }
   SAVE.gems += G.gems; persist();
-  if (G.phase === 'win') rankSubmit();
+  if (G.phase === 'win') { rankSubmit(); checkReview(); }
+}
+function checkReview() {
+  if (SAVE.reviewAsked) return;
+  const daysSince = SAVE.installT ? (Date.now() - SAVE.installT) / 86400000 : 0;
+  const cleared = SAVE.cleared;
+  if (cleared < 10 && !(daysSince >= 7 && cleared >= 5)) return;
+  SAVE.reviewAsked = true; persist();
+  try { if (window.AndroidApp && window.AndroidApp.requestReview) window.AndroidApp.requestReview(); } catch(e) {}
 }
 function dist2(ax, az, bx, bz) { return Math.hypot(ax - bx, az - bz); }
 /* ================= 교전 규칙 ================= */
