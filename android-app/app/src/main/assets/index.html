@@ -457,15 +457,6 @@ const MAPC = { x:180, z:(Z_START + Z_END) / 2 };
 const ROADS = [{}, {}, {}];
 let OP_Z = [185, 300, 415];
 const OUTPOSTS = [], ROOMS = [];
-const MAPCFG = [
-  { name:'던전 외곽',   fork:112, merge:470, join:545, rx:[275, 180, 85], bend:[0, 0, 0],      opz:[185, 300, 415],
-    tile:['#140e1f', '#171024'], road:['#2e2545', '#2a2140'], sky:'#06030b', tint:null },
-  { name:'지하 성채',   fork:128, merge:462, join:548, rx:[284, 180, 76], bend:[22, 0, -22],   opz:[198, 296, 394],
-    tile:['#1c100f', '#211412'], road:['#3a2b30', '#34262b'], sky:'#0b0405', tint:'rgba(255,90,40,.10)' },
-  { name:'심연의 심장', fork:100, merge:502, join:566, rx:[286, 180, 74], bend:[-16, 0, 16],   opz:[172, 286, 400],
-    tile:['#0e1a1c', '#112024'], road:['#24383f', '#203339'], sky:'#03080a', tint:'rgba(60,200,220,.10)' },
-];
-let MAPK = MAPCFG[0], MAPCH = 0;
 const SL3 = [[-17, -26, '앞'], [17, -26, '앞'], [0, 24, '뒤']];
 const SL2 = [[-9, -24, '앞'], [9, 24, '뒤']];
 const SL6 = [[-52, -24, '앞'], [0, -24, '앞'], [52, -24, '앞'], [-52, 26, '뒤'], [0, 26, '뒤'], [52, 26, '뒤']];
@@ -478,7 +469,7 @@ function pathPos(r, d) {
   }
   const e = R.pts[R.pts.length - 1]; return [e[0], e[1]];
 }
-/* z좌표 → 길 위 진행 거리 (길은 z가 계속 늘어나는 방향이라 일대일로 대응한다) */
+/* z좌표 → 길 위 진행 거리 (합류 전 구간은 z가 계속 늘어나서 일대일. 고리가 있는 몸통은 처음 만나는 곳) */
 function dOfZ(r, z) {
   const R = ROADS[r]; z = Math.max(Z_START, Math.min(Z_END, z));
   for (let i = 1; i < R.pts.length; i++) if (z <= R.pts[i][1]) {
@@ -489,34 +480,140 @@ function dOfZ(r, z) {
 }
 /* 그 높이(z)에서 길의 중심 x */
 function roadCx(r, z) { return pathPos(r, dOfZ(r, z))[0]; }
+/* ===== 길 구도: 5관문(장)마다 크게 바뀐다. 무한 모드는 5층마다, 26층부터는 층마다 조합이 바뀌는 미로 =====
+   basic 기본 3갈래 / cross 교차로(길들이 가운데서 만났다가 다시 갈라짐) / detour 우회(굽은 긴 길·병목·함정 칸 많음)
+   merge 합류(마지막 구간에서 하나로) / loop 순환(합류 뒤 고리를 한 바퀴 돌아 나옴 → 같은 함정을 두 번 지난다) / maze 미로(조각 조합)
+   같은 구간의 관문끼리는 같은 구도에 씨앗으로 세부만 바뀐다. 테마(바닥·길 색)는 구간마다 다르다 (1~3구간은 예전 장 테마 그대로) */
+const MAPCFG = [
+  { kind:'basic',  name:'던전 외곽',   hint:'세 갈래 길목을 막아라',
+    tile:['#140e1f', '#171024'], road:['#2e2545', '#2a2140'], sky:'#06030b', tint:null },
+  { kind:'cross',  name:'지하 성채',   hint:'교차로를 지켜라',
+    tile:['#1c100f', '#211412'], road:['#3a2b30', '#34262b'], sky:'#0b0405', tint:'rgba(255,90,40,.10)' },
+  { kind:'detour', name:'심연의 심장', hint:'굽은 길목마다 병목과 함정을 깔아라',
+    tile:['#0e1a1c', '#112024'], road:['#24383f', '#203339'], sky:'#03080a', tint:'rgba(60,200,220,.10)' },
+  { kind:'merge',  name:'망자의 묘역', hint:'마지막 합류 지점에 힘을 모아라',
+    tile:['#121812', '#161e16'], road:['#2c3a2a', '#283425'], sky:'#030603', tint:'rgba(120,200,90,.08)' },
+  { kind:'loop',   name:'피의 회랑',   hint:'고리를 도는 침입자는 같은 함정을 두 번 밟는다',
+    tile:['#1c0c14', '#221018'], road:['#40202c', '#3a1c28'], sky:'#0a0206', tint:'rgba(220,40,80,.10)' },
+  { kind:'maze',   name:'공허의 미궁', hint:'층마다 길이 뒤섞인다',
+    tile:['#0c0a1a', '#100e22'], road:['#26224a', '#221e42'], sky:'#020108', tint:'rgba(140,100,255,.12)' },
+];
+const ENDLESS = -1;   /* 무한 모드의 관문 번호 */
+let MAPK = MAPCFG[0], MAPCH = 0, LAYOUT = null;
+/* 관문 i(무한 모드는 층 fl)의 구간 번호와 씨앗 */
+function segOf(stage, fl) { return stage === ENDLESS ? (fl <= 25 ? Math.floor((Math.max(1, fl) - 1) / 5) : 5) : Math.min(5, Math.floor(stage / 5)); }
+function layoutFor(stage, fl) {
+  const seg = segOf(stage, fl), seed = stage === ENDLESS ? (seg === 5 ? 1000 + fl : 500 + seg) : stage;
+  const rnd = rng32(seed * 7907 + 11), j = a => (rnd() * 2 - 1) * a;
+  const p = { seg, seed, kind:MAPCFG[seg].kind, rx:[275 + j(8), 180, 85 + j(8)], fork:112 + j(8), merge:470 + j(10), join:545, cross:null, wig:0, wigN:2, ph:rnd() * 2,
+              loop:false, opz:null, trapOps:false, chokes:[1, 2], crossT:0.5 };
+  const K = p.kind === 'maze' ? ['cross', 'detour', 'merge', 'loop'].filter(() => rnd() < 0.6) : [p.kind];
+  if (p.kind === 'maze' && !K.length) K.push(['cross', 'detour', 'merge', 'loop'][Math.floor(rnd() * 4)]);
+  if (K.includes('cross')) { p.cross = 268 + j(12); p.merge = Math.max(p.merge, 500 + j(6)); p.chokes = [1, 2]; }
+  if (K.includes('detour')) { p.wig = 40 + j(8); p.wigN = rnd() < 0.5 ? 2 : 3; p.trapOps = true; p.chokes = [2, 3]; }
+  if (K.includes('merge')) { p.merge = 585 + j(8); p.join = 615; p.crossT = 0.62; }
+  if (K.includes('loop') && !K.includes('merge') && !K.includes('cross')) { p.loop = true; p.merge = 362 + j(6); p.join = 400; }
+  else if (K.includes('loop')) K.splice(K.indexOf('loop'), 1);   /* 고리는 일찍 합류해야 해서 교차로·늦은 합류와 같이 못 넣는다 */
+  if (p.kind === 'maze') p.chokes = [1, 3];
+  p.parts = K;
+  return p;
+}
+/* 길 r의 꺾인 점들. 합류 전까지는 z가 계속 늘어나고(위→아래), 합류 뒤 몸통(trunk)은 고리처럼 거슬러 올라갈 수 있다 */
+function roadPts(r, p) {
+  const pts = [[180, Z_START], [p.rx[r], p.fork]], N = 10, mir = 360 - p.rx[r];
+  for (let k = 1; k < N; k++) {
+    const t = k / N, z = p.fork + (p.merge - p.fork) * t;
+    let x = p.rx[r];
+    if (p.cross != null) { const s = Math.max(0, Math.min(1, (z - (p.cross - 80)) / 160)), e = s * s * (3 - 2 * s); x = p.rx[r] * (1 - e) + mir * e; }   /* A·C가 가운데서 엇갈린다 */
+    if (p.wig) x += p.wig * Math.sin((t * p.wigN + p.ph) * Math.PI) * Math.sin(t * Math.PI);   /* 세 길이 나란히 굽는다 */
+    pts.push([Math.max(28, Math.min(332, x)), z]);
+  }
+  pts.push([p.cross != null ? mir : p.rx[r], p.merge]);
+  return pts;
+}
+function trunkPts(p) {
+  const T0 = [[180, p.join]];
+  if (p.loop) {
+    /* 고리: 위에서 들어와 시계 방향으로 한 바퀴 돌고, 가운데를 가로질러 아래로 나간다 */
+    const cx = 180, cz = p.join + 120, ax = 80, az = 100;
+    for (let a = -90; a <= 270; a += 30) { const r = a * Math.PI / 180; T0.push([cx + ax * Math.cos(r), cz + az * Math.sin(r)]); }
+    T0.push([cx, cz + az + 30]);
+  }
+  T0.push([180, Z_END]);
+  return T0;
+}
+function mkRoad(pts) { const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1])); return { pts, cum, len:cum[cum.length - 1] }; }
+/* 길 위 진행 거리 d에서의 방향 (단위 벡터) */
+function roadDir(r, d) { const a = pathPos(r, d - 4), b = pathPos(r, d + 4), l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [(b[0] - a[0]) / l, (b[1] - a[1]) / l]; }
+/* (x,z)에서 길 r 위의 가장 가까운 점: [d, 거리]. hint(직전 d)가 있으면 그 근처 구간만 본다 → 고리에서 엇갈려도 이어서 따라간다 */
+function roadNear(r, x, z, hint, d0, d1) {
+  const R = ROADS[r]; let bd = 0, bl = 1e9;
+  const lo = hint === undefined ? (d0 === undefined ? -1 : d0) : hint - 70, hi = hint === undefined ? (d1 === undefined ? 1e9 : d1) : hint + 70;
+  for (let i = 1; i < R.pts.length; i++) {
+    if (R.cum[i] < lo || R.cum[i - 1] > hi) continue;
+    const a = R.pts[i - 1], c = R.pts[i], vx = c[0] - a[0], vz = c[1] - a[1], L2 = vx * vx + vz * vz || 1;
+    const t = Math.max(0, Math.min(1, ((x - a[0]) * vx + (z - a[1]) * vz) / L2)), px = a[0] + vx * t, pz = a[1] + vz * t, l = Math.hypot(x - px, z - pz);
+    if (l < bl) { bl = l; bd = R.cum[i - 1] + (R.cum[i] - R.cum[i - 1]) * t; }
+  }
+  if (bl > 60 && hint !== undefined) return roadNear(r, x, z);
+  return [bd, bl];
+}
+function projD(r, x, z, hint) { return roadNear(r, x, z, hint)[0]; }
+/* 길 r에서 떨어진 거리. r = 3이면 합류 뒤 몸통 */
+function roadDist(r, x, z) { return r === 3 ? roadNear(0, x, z, undefined, ROADS[0].dMerge - 10)[1] : roadNear(r, x, z)[1]; }
+/* 합류 뒤 몸통에 올라선 침입자인가 */
+function onTrunk(h) { const R = ROADS[h.road]; if (!R) return h.z >= MERGE_Z - 10; return (h.d === undefined ? projD(h.road, h.x, h.z) : h.d) >= R.dMerge - 10; }   /* 길 정보가 없으면 예전처럼 높이로 */
+/* (x,z)를 길 r의 중심에서 w 안으로 끌어온다 */
+function clampRoad(r, x, z, w, hint) {
+  const d = r === 3 ? roadNear(0, x, z, undefined, ROADS[0].dMerge - 10)[0] : projD(r, x, z, hint), q = pathPos(r === 3 ? 0 : r, d);
+  const dx = x - q[0], dz = z - q[1], l = Math.hypot(dx, dz);
+  return l <= w ? [x, z] : [q[0] + dx / l * w, q[1] + dz / l * w];
+}
+/* 거점: 길 방향에 맞춰 칸을 돌려 놓는다 (앞 = 입구 쪽) */
 function addOutpost(o, cells) {
-  o.slots = []; const oi = OUTPOSTS.length;
-  for (const [dx, dz, row] of cells) {
+  o.slots = []; const oi = OUTPOSTS.length, rr = o.road < 3 ? o.road : 0, t = roadDir(rr, o.d), side = o.trapOps;
+  for (const [lat, along, row] of cells) {
     o.slots.push(ROOMS.length);
-    ROOMS.push({ x:o.x + dx, z:o.z + dz, road:o.road, op:oi, row, d:dOfZ(o.road < 3 ? o.road : 1, o.z + dz) });
+    const x = o.x + lat * t[1] + along * t[0], z = o.z - lat * t[0] + along * t[1];
+    ROOMS.push({ x, z, road:o.road, op:oi, row:side ? '함정' : row, d:projD(rr, x, z), trapOnly:!!side });
   }
   OUTPOSTS.push(o);
 }
-/* 장(章) 번호 ch(0~2)에 맞춰 길과 거점을 다시 짠다. 칸 수(NROOM)는 모든 장에서 같다. */
-function buildMap(ch) {
-  const c = MAPCFG[Math.max(0, Math.min(MAPCFG.length - 1, ch))]; MAPK = c; MAPCH = MAPCFG.indexOf(c);
-  FORK_Z = c.fork; MERGE_Z = c.merge; JOIN_Z = c.join; OP_Z = c.opz.slice();
-  const mid = (c.fork + c.merge) / 2;
+/* 관문(또는 무한 층)의 구도로 길과 거점을 다시 짠다. 칸 수(NROOM)는 모든 구도에서 같다 */
+function buildMap(p) {
+  if (typeof p === 'number') p = layoutFor(p, 1);
+  LAYOUT = p; const c = MAPCFG[p.seg]; MAPK = c; MAPCH = p.seg;
+  FORK_Z = p.fork; MERGE_Z = p.merge; JOIN_Z = p.join;
+  const tr = trunkPts(p);
   for (let r = 0; r < 3; r++) {
-    const rx = c.rx[r]; ROAD_X[r] = rx;
-    const pts = [[180, Z_START], [rx, c.fork], [rx + c.bend[r], mid], [rx, c.merge], [180, c.join], [180, Z_END]], cum = [0];
-    for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-    ROADS[r] = { rx, pts, cum, len:cum[cum.length - 1] };
+    const pre = roadPts(r, p), R = mkRoad(pre.concat(tr));
+    R.nPre = pre.length; R.dFork = R.cum[1]; R.dMerge = R.cum[pre.length - 1]; R.dJoin = R.cum[pre.length]; R.rx = p.rx[r];
+    ROADS[r] = R; ROAD_X[r] = p.rx[r];
   }
   OUTPOSTS.length = 0; ROOMS.length = 0;
-  for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++)
-    addOutpost({ road:r, no:k + 1, name:ROAD_NAME[r].charAt(0) + (k + 1), x:roadCx(r, OP_Z[k]), z:OP_Z[k] }, k < 2 ? SL3 : SL2);
-  addOutpost({ road:3, no:1, name:'교차로', x:180, z:602 }, SL6);
+  /* 거점 자리 (합류 전 구간 안에서의 비율). 교차로 구도는 B2가 정확히 교차점 */
+  for (let r = 0; r < 3; r++) {
+    const R = ROADS[r], span = R.dMerge - R.dFork, f = [0.2, 0.52, 0.84];
+    const ds = f.map(t => R.dFork + span * t);
+    if (p.cross != null) { const dc = dOfZ(r, p.cross); if (r === 1) { ds[0] = Math.min(ds[0], dc - 100); ds[1] = dc; } else { ds[0] = Math.min(ds[0], dc - 110); ds[1] = dc + 64; ds[2] = Math.max(ds[2], ds[1] + 100); } }
+    OP_Z = ds.map(d => pathPos(1, d)[1]);
+    ds.forEach((d, k) => { const q = pathPos(r, d); addOutpost({ road:r, no:k + 1, name:ROAD_NAME[r].charAt(0) + (k + 1), x:q[0], z:q[1], d, trapOps:p.trapOps && k === 2 }, k < 2 ? SL3 : SL2); });
+  }
+  /* 교차로 거점: 몸통 위 (고리 구도는 고리 한가운데) */
+  const R0 = ROADS[0], dX = p.loop ? null : R0.dJoin + (R0.len - R0.dJoin) * (p.crossT - 0.08);
+  const qx = p.loop ? [180, p.join + 120] : pathPos(0, dX);
+  addOutpost({ road:3, no:1, name:'교차로', x:qx[0], z:qx[1], d:p.loop ? projD(0, qx[0], qx[1]) : dX }, SL6);
   /* 길마다 함정 전용 칸 1개. 자리는 관문마다 stageFeats가 정한다 */
-  for (let r = 0; r < 3; r++) ROOMS.push({ x:roadCx(r, gapZ(1)), z:gapZ(1), road:r, op:-1, row:'함정', d:dOfZ(r, gapZ(1)), trapOnly:true });
+  for (let r = 0; r < 3; r++) { const d = gapD(r, 1), q = pathPos(r, d); ROOMS.push({ x:q[0], z:q[1], road:r, op:-1, row:'함정', d, trapOnly:true }); }
 }
-/* 거점 사이 빈 구간의 가운데 z (1: 1~2거점 사이, 2: 2~3거점 사이, 3: 합류 뒤 교차로 앞) */
-function gapZ(g) { return g === 3 ? (JOIN_Z + 578) / 2 : (OP_Z[g - 1] + OP_Z[g]) / 2; }
+/* 거점 사이 빈 구간의 가운데 (1: 1~2거점 사이, 2: 2~3거점 사이, 3: 합류 뒤 교차로 앞 몸통) → 길 위 거리 */
+function gapD(r, g) {
+  if (g === 3) { const R = ROADS[0], o = OUTPOSTS[OUTPOSTS.length - 1]; return LAYOUT.loop ? R.dJoin + 30 : (R.dJoin + o.d) / 2; }
+  const ops = OUTPOSTS.filter(o => o.road === r);
+  if (LAYOUT.cross != null && r !== 1 && g === 1) return ops[0].d + (ops[1].d - ops[0].d) * 0.3;   /* 교차점 한가운데는 비워 둔다 */
+  return (ops[g - 1].d + ops[g].d) / 2;
+}
+function gapZ(g) { return pathPos(1, gapD(1, g))[1]; }
 /* ===== 지형 =====
    choke 병목: 길이 좁아져 침입자가 한 줄로 지나가고, 그 안의 권속은 받는 피해가 줄어든다
    swamp 늪: 침입자 이동 감속 / altar 제단: 근처 권속 공격력 증가 / 함정 전용 칸: 함정만 놓을 수 있다
@@ -527,19 +624,26 @@ const FEAT = {
   altar: { name:'제단', lab:'#ff8aa4', col:'#c74a6a', dmg:1.2 },
 };
 const FEAT_R = 30;
-function stageFeats(stage) {
-  const rnd = rng32((stage + 2) * 7919 + 3), F = [], used = {};
+function stageFeats(stage, p) {
+  p = p || (stage === ENDLESS ? LAYOUT : layoutFor(stage, 1));
+  const rnd = rng32((p.seed + 2) * 7919 + 3), F = [], used = {};
   const tg = [0, 1, 2].map(() => (rnd() < 0.5 ? 1 : 2));
   tg.forEach((g, r) => { used[r + ':' + g] = 1; });
-  const n = stage < 0 ? 4 : Math.min(4, 1 + Math.floor(stage / 4)), types = Object.keys(FEAT);
-  for (let tries = 0; F.length < n && tries < 60; tries++) {
-    const t = types[Math.floor(rnd() * types.length)], r = rnd() < 0.2 ? 3 : Math.floor(rnd() * 3);
-    const g = r === 3 ? 3 : (rnd() < 0.5 ? 1 : 2);
-    if (used[r + ':' + g] || (r === 3 && t === 'choke')) continue;
-    used[r + ':' + g] = 1;
-    const z = gapZ(g); F.push({ t, road:r, x:r === 3 ? 180 : roadCx(r, z), z });
+  /* 병목: 구도마다 정한 개수 (기본 1~2, 우회 2~3) */
+  const nc = p.chokes[0] + Math.floor(rnd() * (p.chokes[1] - p.chokes[0] + 1));
+  for (let tries = 0, c = 0; c < nc && tries < 40; tries++) { const r = Math.floor(rnd() * 3), g = rnd() < 0.5 ? 1 : 2; if (used[r + ':' + g]) continue; used[r + ':' + g] = 1; F.push({ t:'choke', road:r, g }); c++; }
+  /* 늪·제단: 뒤 관문일수록 많이 */
+  const n = Math.max(0, (stage < 0 ? 4 : Math.min(4, 1 + Math.floor(stage / 4))) - nc);
+  for (let tries = 0, c = 0; c < n && tries < 60; tries++) {
+    const t = rnd() < 0.5 ? 'swamp' : 'altar', r = rnd() < 0.2 ? 3 : Math.floor(rnd() * 3), g = r === 3 ? 3 : (rnd() < 0.5 ? 1 : 2);
+    if (used[r + ':' + g]) continue; used[r + ':' + g] = 1; F.push({ t, road:r, g }); c++;
   }
   return { F, tg };
+}
+/* 지형 자리 잡기 (지금 길 구도 위에) */
+function placeFeats(F) {
+  return F.map(f => { const rr = f.road === 3 ? 0 : f.road, d = gapD(rr, f.g), q = pathPos(rr, d), t = roadDir(rr, d);
+    return { t:f.t, road:f.road, g:f.g, x:q[0], z:q[1], d, yaw:Math.atan2(t[0], t[1]) }; });
 }
 /* ===== 관문 장식: 길 바깥 빈 바닥을 관문 분위기에 맞는 소품으로 채운다 =====
    시야를 가리지 않게 낮고 어둡게, 상자 1~3개짜리로만 만든다. 전투마다 한 번 만들어 두고 그리기만 한다 */
@@ -571,8 +675,8 @@ function stageDecor(stage) {
   const kinds = DECOR[stage] || ['crystal', 'rune'], rnd = rng32((stage + 3) * 104729 + 17), out = [];
   const clear = (x, z) => {
     if (dist2(x, z, STONE.x, STONE.z) < 80 || z < Z_START - 30) return false;
-    if (z >= JOIN_Z - 10 && Math.abs(x - 180) < 92) return false;   /* 교차로·수호석 길 */
-    for (let r = 0; r < 3; r++) if (Math.abs(x - roadCx(r, z)) < 52) return false;
+    if (roadDist(3, x, z) < 70) return false;   /* 교차로·수호석 길 */
+    for (let r = 0; r < 3; r++) if (roadDist(r, x, z) < 52) return false;
     for (const R of ROOMS) if (dist2(x, z, R.x, R.z) < 34) return false;
     return true;
   };
@@ -588,12 +692,15 @@ function stageDecor(stage) {
 }
 /* (x, z)가 t 지형 안이면 그 지형 */
 function featAt(x, z, t) {
-  for (const f of G.feats) if (f.t === t && Math.abs(z - f.z) <= FEAT_R && Math.abs(x - f.x) <= (f.road === 3 ? 60 : 40)) return f;
+  for (const f of G.feats) {
+    if (f.t !== t) continue;
+    const dx = x - f.x, dz = z - f.z, sn = Math.sin(f.yaw || 0), cs = Math.cos(f.yaw || 0);
+    if (Math.abs(dx * sn + dz * cs) <= FEAT_R && Math.abs(dx * cs - dz * sn) <= (f.road === 3 ? 60 : 40)) return f;   /* 길 방향 기준 앞뒤·좌우 */
+  }
   return null;
 }
-buildMap(0);
+buildMap(layoutFor(0, 1));
 const NROOM = ROOMS.length;
-function chapterOf(stage) { return stage === ENDLESS ? MAPCFG.length - 1 : Math.min(MAPCFG.length - 1, Math.floor(stage / 5)); }
 /* 길 구분: 0~2 = A·B·C길, 3 = 교차로(합류 구간). 3이면 어느 길의 상대와도 맞붙는다. */
 function compat(a, b) { return a === 3 || b === 3 || a === b; }
 
@@ -917,7 +1024,8 @@ const STAGE_NAMES = ['바깥 통로', '지하 묘지', '돌의 회랑', '폐허�
 const STAGE_GEMS = [140, 200, 280, 380, 800, 600, 780, 1000, 1300, 2600, 1800, 2300, 2900, 3600, 7000];
 /* 5관문(보스) 배율은 무과금 진행 시뮬레이션으로 맞춤 (0.75→0.68).
    10·15관문은 성녀 무적·원거리 회복을 고친 뒤 같은 조건 승률이 원래대로 돌아오게 다시 맞춤 (10: 1.00, 15: 0.80→0.90) */
-const STAGE_MUL = [1.30, 1.40, 1.50, 1.60, 0.68, 0.80, 1.50, 0.72, 1.60, 1.00, 1.70, 1.90, 1.90, 2.00, 0.90];
+/* 10관문(교차로 구도)·15관문(우회 구도)은 길 구도가 바뀐 만큼 낮춤 (1.00→0.97, 0.90→0.77) */
+const STAGE_MUL = [1.30, 1.40, 1.50, 1.60, 0.68, 0.80, 1.50, 0.72, 1.60, 0.97, 1.70, 1.90, 1.90, 2.00, 0.77];
 /* 방어 라인(입구 쪽 z좌표): 권속은 이 선보다 입구 쪽으로 나가지 못한다.
    관문 번호(0부터)별로 값을 넣으면 그 값을 쓰고, 없으면 그 장의 갈림길 위치(FORK_Z)를 쓴다. 예: { 3:150 } */
 const STAGE_DEFLINE = {};
@@ -932,7 +1040,6 @@ const STAGES = (() => {
   return out;
 })();
 /* 무한 모드: 끝없이 이어지는 웨이브를 그때그때 만들어 낸다 */
-const ENDLESS = -1;
 function affixFor(n) {
   if (n < 4) return null;
   if (Math.random() > Math.min(0.75, 0.12 + n * 0.055)) return null;
@@ -978,7 +1085,7 @@ function defaultSave() {
            soul:START_SOUL, stam:STAM.max, stamT:0, enh:{}, stars:{}, heroDex:{}, dexGot:{}, adSoulCount:0,
            dq:null, att:{ n:0, day:'' }, boxT:0, mailGot:{}, clr:{ s:{}, m:{} },
            /* 튜토리얼: s = 진행 단계(숫자) 또는 'done', seen = 기능 안내를 본 것, got = 무료 소환권 지급 여부 */
-           tut:{ s:0, seen:{}, got:false }, tickets:0,
+           tut:{ s:0, seen:{}, got:false }, tickets:0, segSeen:[],
            /* 경쟁전: 관문별 남은 수호석 최고 %, 마지막으로 제출한 점수, 첫 실행 제출 여부 */
            stoneBest:{}, rankSent:0, rankInit:false,
            /* 덱 1·2·3: mteam/tteam은 지금 고른 덱의 배열을 그대로 가리킨다 (linkDeck) */
@@ -1515,12 +1622,51 @@ function reset(stage) {
         msg:'빈 칸을 누르고 카드를 배치하세요', msgT:4, gems:0, done:false, doubled:false, usedContinue:false,
         scd, skc:{}, frenzy:0, seal:0, aim:null, moveFrom:-1, moveCd:0, hs:0, smites:[] };
   /* 관문 지형 + 함정 전용 칸 자리 */
-  const sf = stageFeats(stage); G.feats = sf.F; G.decor = stageDecor(stage);
-  ROOMS.forEach(R => { if (R.trapOnly) { const z = gapZ(sf.tg[R.road]); R.z = z; R.x = roadCx(R.road, z); R.d = dOfZ(R.road, z); } });
+  layoutFeats(stage);
   G.plan = planWave();
 }
 reset(0);
 function say(t) { G.msg = t; G.msgT = 3; }
+/* 지금 길 구도에 맞춰 지형·장식·길 사이 함정 칸 자리를 잡는다 */
+function layoutFeats(stage) {
+  const sf = stageFeats(stage, LAYOUT); G.feats = placeFeats(sf.F); G.decor = stageDecor(stage);
+  ROOMS.forEach(R => { if (R.trapOnly && R.op < 0) { const d = gapD(R.road, sf.tg[R.road]), q = pathPos(R.road, d); R.x = q[0]; R.z = q[1]; R.d = d; } });
+}
+/* 무한 모드: 층이 구간을 넘으면(26층부터는 층마다) 길 구도를 바꾸고 세워 둔 카드를 새 자리로 옮긴다. 못 서는 카드는 손으로 */
+function endlessRelayout() {
+  const fl = G.wIdx + 1, p = layoutFor(ENDLESS, fl);
+  if (LAYOUT && p.seg === LAYOUT.seg && p.seed === LAYOUT.seed) return;
+  const newSeg = !LAYOUT || p.seg !== LAYOUT.seg;
+  buildMap(p); layoutFeats(ENDLESS);
+  for (let i = 0; i < NROOM; i++) {
+    const b = G.rooms[i]; if (!b) continue;
+    if (!roomOk(b.key, i)) { if (!b.extra) G.hand[b.key] = (G.hand[b.key] || 0) + 1; G.rooms[i] = null; continue; }
+    const R = ROOMS[i]; b.x = b.hx = R.x; b.z = b.hz = R.z; b.d = b.homeD = R.d; b.road = b.homeRoad = R.road;
+  }
+  if (newSeg) segBanner(p.seg); else { G.banner = { t:0, seg:p.seg, small:true }; }
+}
+/* 새 구간에 처음 들어갈 때: "던전이 더 깊어졌다" + 구도 특징 한 줄 */
+function segBanner(seg) { G.banner = { t:0, seg }; SFX.roar && SFX.roar(); }
+function segIntro(i) {
+  const seg = LAYOUT.seg; SAVE.segSeen = SAVE.segSeen || [];
+  if (i !== ENDLESS && seg > 0 && SAVE.segSeen.indexOf(seg) < 0) { SAVE.segSeen.push(seg); persist(); segBanner(seg); }
+}
+function drawSegBanner() {
+  const B = G.banner; if (!B) return;
+  B.t += 1 / 60; const life = B.small ? 1.8 : 3.2; if (B.t > life) { G.banner = null; return; }
+  const a = Math.min(1, B.t / 0.3, (life - B.t) / 0.5), c = MAPCFG[B.seg];
+  ctx.save(); ctx.globalAlpha = a;
+  const y = 250, h = B.small ? 44 : 86;
+  ctx.fillStyle = 'rgba(8,4,14,.82)'; ctx.fillRect(0, y - h / 2, W, h);
+  ctx.fillStyle = c.road[0]; ctx.fillRect(0, y - h / 2, W, 2); ctx.fillRect(0, y + h / 2 - 2, W, 2);
+  if (B.small) txt('🌀 미궁의 길이 바뀌었다', W / 2, y, 13, '#c9b8ff', 'center');
+  else {
+    txt('⛏ 던전이 더 깊어졌다', W / 2, y - 24, 16, '#ffd35a', 'center');
+    txt(c.name, W / 2, y + 2, 12, '#e4d4ff', 'center');
+    txt(c.hint, W / 2, y + 24, 11, '#9ae8b5', 'center');
+  }
+  ctx.restore();
+}
 function stageOpen(i) { return i === ENDLESS ? SAVE.cleared >= STAGES.length : i <= SAVE.cleared; }
 function curStage() { return G.endless ? { no:'∞', name:'무한의 문' } : STAGES[G.stage]; }
 function startBattle(i) {
@@ -1528,7 +1674,7 @@ function startBattle(i) {
   if (!SAVE.mteam.length) { toast('권속을 최소 1명은 편성해야 해요'); return; }
   if (stamNow() < STAM.cost) { M = { k:'stam', then:i }; return; }
   SAVE.stam -= STAM.cost; persist(); M = null;
-  buildMap(chapterOf(i)); reset(i); scene = 'game'; camSnap('prep');
+  buildMap(layoutFor(i, 1)); reset(i); scene = 'game'; camSnap('prep'); segIntro(i);
 }
 function finishBattle() {
   if (G.done) return; G.done = true;
@@ -1562,10 +1708,9 @@ function dist2(ax, az, bx, bz) { return Math.hypot(ax - bx, az - bz); }
 /* ================= 교전 규칙 ================= */
 /* 서로 마주칠 수 있는 자리인가. 평행한 옆 길의 적은 보지 못하고, 합류 구간 이후의 교차로 거점은 어느 길에서 오든 만난다.
    '길 중심에서 가로로 얼마나 떨어졌나'로 판정해서 경계에서 왔다 갔다 하는 일이 없고, 양쪽이 똑같이 보인다. */
-function laneX(road, z) { return road < 3 ? roadCx(road, z) : 180; }
 function meet(u, h) {
-  if (u.road === 3) return h.z >= MERGE_Z - 10;
-  return Math.abs(u.x - laneX(h.road, u.z)) <= 44 && Math.abs(h.x - laneX(u.road, h.z)) <= 44;
+  if (u.road === 3) return onTrunk(h);
+  return roadDist(h.road, u.x, u.z) <= 44 && roadDist(u.road, h.x, h.z) <= 44;   /* 서로 상대 길 위(옆)에 있어야 마주친다 */
 }
 function heroSees(h, u) { return meet(u, h); }
 function unitSees(u, h) { return meet(u, h); }
@@ -1599,7 +1744,7 @@ const CRUISE = 1.5;   /* 싸우지 않고 걷는 침입자 무리의 속도 배�
 /* 침입자 기본 이동 속도: 전체적으로 조금, 느린 탱커·보스는 더 많이 올린다 (18 → 약 26, 26 → 약 31, 46 → 약 53) */
 function heroSpd(s) { return s * 1.15 + Math.max(0, 28 - s) * 0.5; }
 /* 같은 길이거나, 둘 다 합류 뒤 교차로 구간이면 서로 회복할 수 있다 */
-function sameLane(a, b) { return a.road === b.road || (a.z >= MERGE_Z - 10 && b.z >= MERGE_Z - 10); }
+function sameLane(a, b) { return a.road === b.road || (onTrunk(a) && onTrunk(b)); }
 /* 회복량: 보스는 절반 */
 function healAmt(o, frac) { return Math.round(o.maxHp * frac * (o.boss ? HEAL_BOSS : 1)); }
 const ENTRY = 30;   /* 침입자가 나타나는 자리: 갈림길에서 입구 쪽으로 이만큼 */
@@ -1650,7 +1795,7 @@ function fireTrap(b) {
     if (d.slow) { h.slow = Math.max(h.slow, d.slowT || 3); h.slowF = d.slow; }
     if (d.dot) { h.dotT = d.dotT; h.dotDps = d.dot * lvm * k; h.dotCol = d.col; }
     if (d.push) {
-      const nd = Math.max(0, dOfZ(h.road, h.z) - d.push), q = pathPos(h.road, nd);
+      const nd = Math.max(0, projD(h.road, h.x, h.z, h.d) - d.push), q = pathPos(h.road, nd); h.d = nd;
       h.x = q[0] + h.fx; h.z = q[1]; h.party.d = Math.max(0, h.party.d - d.push);
       fxText(h.x, h.z, '밀려남', '#8be9ff');
     }
@@ -1662,11 +1807,11 @@ function fireTrap(b) {
   /* 갈림길 문: 처음 닿은 용사의 무리를 같은 거리의 다른 길로 보낸다 (보스가 있는 무리와 합류 뒤에는 소용없음) */
   if (d.warp && vic.length) {
     const P = vic[0].party, others = [0, 1, 2].filter(r => r !== P.road);
-    if (P.heroes.some(h => h.boss || h.def.boss) || b.road === 3 || P.d >= dOfZ(P.road, MERGE_Z) - 20) fxText(b.x, b.z - 10, '버팀', '#c9c9c9');
+    if (P.heroes.some(h => h.boss || h.def.boss) || b.road === 3 || P.d >= ROADS[P.road].dMerge - 20) fxText(b.x, b.z - 10, '버팀', '#c9c9c9');
     else {
       const nr = others[Math.floor(Math.random() * others.length)];
-      P.road = nr; P.d = P.dAvg = Math.min(P.d, dOfZ(nr, MERGE_Z) - 30);
-      for (const h of P.heroes) { h.road = nr; const q = pathPos(nr, Math.max(0, P.d + h.fz)); h.x = q[0] + h.fx; h.z = q[1]; h.tgt = null; burst(h.x, 14, h.z, 10, d.col, 70); }
+      P.road = nr; P.d = P.dAvg = Math.min(P.d, ROADS[nr].dMerge - 30);
+      for (const h of P.heroes) { h.road = nr; h.d = Math.max(0, P.d + h.fz); const q = pathPos(nr, h.d); h.x = q[0] + h.fx; h.z = q[1]; h.tgt = null; burst(h.x, 14, h.z, 10, d.col, 70); }
       fxText(b.x, b.z - 10, ROAD_NAME[nr] + '로!', d.col);
     }
   }
@@ -1805,11 +1950,11 @@ function bossTick(h, dt) {
     note(sk === 'whirl' ? '#5ac8ff' : '#ff3a5a');
   } else if (sk === 'breath') {
     /* 용기사: 앞쪽 길을 따라 곧게 불을 뿜어 그 위의 권속 전부에게 피해 */
-    const vic = G.rooms.filter(b => b && b.def.kind === 'minion' && b.z >= h.z - 10 && b.z <= h.z + BREATH_LEN && Math.abs(b.x - laneX(h.road, b.z)) <= 46);
+    const hd = h.d === undefined ? projD(h.road, h.x, h.z) : h.d, vic = G.rooms.filter(b => { if (!b || b.def.kind !== 'minion') return false; const n = roadNear(h.road, b.x, b.z, hd + BREATH_LEN / 2); return n[0] >= hd - 10 && n[0] <= hd + BREATH_LEN && n[1] <= 46; });
     if (!vic.length) { h.skT = 2; return; }
     h.skT = 9;
     for (const v of vic) { const d = dmgMinion(v, h.dmg * 2); fxText(v.x, v.z, '-' + Math.round(d), '#ff8a3a'); sev('hit', h, v, d, { col:'#ff8a3a' }); burst(v.x, 12, v.z, 8, '#ff8a3a', 70); }
-    for (let z = h.z; z < h.z + BREATH_LEN; z += 26) burst(laneX(h.road, z), 14, z, 4, '#ff8a3a', 50);
+    for (let s2 = 0; s2 < BREATH_LEN; s2 += 26) { const q = pathPos(h.road, hd + s2); burst(q[0], 14, q[1], 4, '#ff8a3a', 50); }
     note('#ff8a3a');
   } else if (sk === 'smite') {
     h.skT = 8;
@@ -1888,7 +2033,7 @@ function startWave() {
 function spawnParty(pp) {
   const sc = waveMul();
   /* 입구에서 갈림길까지의 빈 구간은 건너뛰고 갈림길 조금 앞에서 나타난다 */
-  const d0 = Math.max(46, dOfZ(pp.road, FORK_Z) - ENTRY);
+  const d0 = Math.max(46, ROADS[pp.road].dFork - ENTRY);
   const P = { road:pp.road, d:d0, heroes:[], fight:false, live:0, sp:0, dAvg:d0 };
   const order = pp.members.slice().sort((a, b) => FORM[DEF[b.type].role] - FORM[DEF[a.type].role]);
   const cnt = {};
@@ -1919,11 +2064,19 @@ function mkHero(type, af, P, fz, fx, sc, at) {
     return h;
   }
 }
+/* 이 칸에 이 카드를 세울 수 있나. 못 세우면 이유 */
+function roomWhy(key, i) {
+  const R = ROOMS[i]; if (!R) return '칸이 없어요';
+  if (R.trapOnly && DEF[key].kind !== 'trap') return '함정 전용 칸이에요';
+  if (DEF[key].warp && (R.road > 2 || R.d >= ROADS[R.road].dMerge - 30)) return '갈림길 문은 다른 길로 이어지는 갈래 길에만 놓을 수 있어요';
+  return '';
+}
+function roomOk(key, i) { return !roomWhy(key, i); }
 function place(key) {
   if (G.sel < 0) { say('먼저 빈 방을 선택하세요'); return; }
   if (G.rooms[G.sel]) { say('이미 사용 중인 방이에요'); return; }
   if (!G.hand[key]) { say('이 카드는 이미 배치했어요'); return; }
-  if (ROOMS[G.sel].trapOnly && DEF[key].kind !== 'trap') { say('함정 전용 칸이에요'); return; }
+  const why = roomWhy(key, G.sel); if (why) { say(why); return; }
   G.hand[key]--; putUnit(key, G.sel); G.sel = -1;
 }
 function putUnit(key, i) {
@@ -1959,7 +2112,9 @@ function autoDeploy(mode, keep) {
   const crossF = cross.filter(i => ROOMS[i].row === '앞'), crossB = cross.filter(i => ROOMS[i].row === '뒤');
   cards.sort((a, b) => rank(a) - rank(b) || (DEF[b].hp || 0) - (DEF[a].hp || 0));
   let n = 0;
-  const put = (c, i) => { if (i === undefined) return false; G.sel = i; place(c); n++; return true; };
+  const put = (c, i) => {
+    if (i !== undefined && !roomOk(c, i)) { const j = ROOMS.findIndex((R, q) => !G.rooms[q] && roomOk(c, q)); i = j >= 0 ? j : undefined; }   /* 갈림길 문 등: 놓을 수 있는 다른 칸 */
+    if (i === undefined) return false; G.sel = i; place(c); n++; return true; };
   const rest = [];
   if (mode === 'hybrid') {
     /* 교차로에는 모두가 지나가므로 가장 든든한 전열·원거리·함정을 먼저 세운다 */
@@ -1996,7 +2151,7 @@ function startMove() {
 function doMove(to) {
   const from = G.moveFrom; G.moveFrom = -1;
   if (from < 0 || !G.rooms[from] || G.rooms[to]) { say('빈 방으로만 옮길 수 있어요'); return; }
-  if (ROOMS[to].trapOnly && G.rooms[from].def.kind !== 'trap') { say('함정 전용 칸이에요'); return; }
+  const why = roomWhy(G.rooms[from].key, to); if (why) { say(why); return; }
   const u = G.rooms[from], s = ROOMS[to];
   burst(u.x, 12, u.z, 8, '#6bdc7a', 40);
   u.x = s.x; u.z = s.z; u.hx = s.x; u.hz = s.z; u.d = s.d; u.homeD = s.d; u.road = s.road; u.cd = Math.max(u.cd, 0.3);
@@ -2083,7 +2238,7 @@ function update(dt) {
     let sp = 1e9, dsum = 0, fight = false;
     for (const h of P.heroes) {
       if (h.stun <= 0 && !h.def.runner) { const v = h.spd * (h.slow > 0 ? (h.slowF || 0.5) : 1) * (featAt(h.x, h.z, 'swamp') ? FEAT.swamp.spd : 1) * (h.aura ? BARD_SPD : 1); if (v < sp) sp = v; }
-      dsum += dOfZ(P.road, h.z) - h.fz; if (h.fighting) fight = true;
+      dsum += (h.d === undefined ? projD(P.road, h.x, h.z) : h.d) - h.fz; if (h.fighting) fight = true;
     }
     /* 도굴꾼만 남은 무리는 도굴꾼 걸음으로 */
     if (sp > 1e8) for (const h of P.heroes) if (h.stun <= 0 && h.def.runner) sp = Math.min(sp, h.spd * (h.slow > 0 ? (h.slowF || 0.5) : 1));
@@ -2128,7 +2283,7 @@ function update(dt) {
       }
     }
     if (df.skill && G.seal <= 0 && !(h.charmT > 0)) bossTick(h, dt);
-    h.d = dOfZ(h.road, h.z);
+    h.d = projD(h.road, h.x, h.z, h.d);
     if (h.dotT > 0) {
       h.dotT -= dt; h.hp -= h.dotDps * dt; h.dotAcc = (h.dotAcc || 0) + h.dotDps * dt;
       if (h.dotAcc >= 9) { fxText(h.x, h.z, '-' + Math.round(h.dotAcc), h.dotCol || '#ff9a3a'); h.dotAcc = 0; }
@@ -2222,20 +2377,20 @@ function update(dt) {
           if (dl > want) {
             const stp = Math.min(dl - want, h.spd * 1.2 * (h.slow > 0 ? (h.slowF || 0.5) : 1) * (featAt(h.x, h.z, 'swamp') ? FEAT.swamp.spd : 1) * dt);
             h.x += dx / dl * stp; h.z += dz / dl * stp; h.moving = 1;
-            const cx = roadCx(h.road, h.z), hw = featAt(h.x, h.z, 'choke') ? FEAT.choke.w : 34; h.x = Math.max(cx - hw, Math.min(cx + hw, h.x));
+            const cq = clampRoad(h.road, h.x, h.z, featAt(h.x, h.z, 'choke') ? FEAT.choke.w : 34, h.d); h.x = cq[0]; h.z = cq[1];
             h.dustT -= dt; if (h.dustT <= 0) { h.dustT = 0.3; dust(h.x, h.z, 2); }
           }
         }
       } else if ((df.heal && P.fight && !h.healing) || (df.runner && P.fight)) {
         /* 고칠 아군이 없는 지원은 뒤에 서 있지 않고 혼자서라도 수호석 쪽으로 걸어간다 */
-        const nd = Math.min(ROADS[h.road].len, dOfZ(h.road, h.z) + h.spd * (h.slow > 0 ? (h.slowF || 0.5) : 1) * dt), q = pathPos(h.road, nd);
+        const nd = Math.min(ROADS[h.road].len, projD(h.road, h.x, h.z, h.d) + h.spd * (h.slow > 0 ? (h.slowF || 0.5) : 1) * dt), q = pathPos(h.road, nd);
         const dx = q[0] + h.fx * 0.3 - h.x, dz = q[1] - h.z; h.x += dx; h.z += dz;
         if (Math.abs(dx) + Math.abs(dz) > 0.01) { h.yaw = Math.atan2(dx, dz); h.moving = 1; }
       } else if (!P.fight) {
-        const want = pathPos(h.road, Math.min(ROADS[h.road].len, P.d + h.fz)), k = Math.min(1, dt * 3.2 * CRUISE);
+        const wd = Math.min(ROADS[h.road].len, P.d + h.fz), want = pathPos(h.road, wd), tdir = roadDir(h.road, wd), k = Math.min(1, dt * 3.2 * CRUISE);
         const px = h.x, pz = h.z;
         const fx = featAt(h.x, h.z, 'choke') ? h.fx * 0.15 : h.fx;   /* 병목에서는 한 줄로 */
-        h.x += (want[0] + fx - h.x) * k; h.z += (want[1] - h.z) * k;
+        h.x += (want[0] + fx * tdir[1] - h.x) * k; h.z += (want[1] - fx * tdir[0] - h.z) * k;   /* 대형의 좌우는 길 방향 기준 */
         const dx = h.x - px, dz = h.z - pz;
         if (Math.abs(dx) + Math.abs(dz) > 0.01) {
           h.yaw = Math.atan2(dx, dz); h.moving = 1;
@@ -2249,7 +2404,7 @@ function update(dt) {
   if (G.seal <= 0) for (const P of G.parties) {
     const d0 = P.d;
     if (P.fight) P.d = P.dAvg; else P.d = Math.min(ROADS[P.road].len + 44, P.d + P.sp * CRUISE * dt);
-    if (G.blocks) for (const k of G.blocks) if (k.road === 3 || k.road === P.road) { const bd = dOfZ(P.road, k.z) - 26; if (d0 <= bd && P.d > bd) P.d = bd; }
+    if (G.blocks) for (const k of G.blocks) if (k.road === 3 || k.road === P.road) { const bd = projD(P.road, k.x, k.z) - 26; if (d0 <= bd && P.d > bd) P.d = bd; }
   }
 
   /* ===== 권속: 같은 길의 침입자를 마중 나가 막는다 ===== */
@@ -2302,7 +2457,7 @@ function update(dt) {
       if (nh) {
         elig.length = 0; free = true;
         for (const h of G.heroes) if (h === nh || dist2(b.x, b.z, h.x, h.z) <= rngB) elig.push(h);
-        b.road = b.z >= MERGE_Z - 10 ? 3 : nh.road;
+        b.road = onTrunk(nh) ? 3 : nh.road;
       }
     } else if (b.aggroT > 0 && b.aggro && b.aggro.hp > 0) {
       if (elig.indexOf(b.aggro) < 0) elig.push(b.aggro);
@@ -2336,8 +2491,8 @@ function update(dt) {
           /* 길 밖으로는 못 나간다 */
           /* 방어 라인을 넘으려 하면 라인에서 멈춘다. 막혀서 못 때리는 중(breakT)이면 넘어가서 쫓고, 끝나면 걸어서 돌아온다 */
           if (!(b.breakT > 0)) nz = Math.max(Math.min(G.defLine, b.z), nz);
-          if (b.road < 3) { const cxr = roadCx(b.road, nz); nx = Math.max(cxr - 30, Math.min(cxr + 30, nx)); }
-          else nx = Math.max(60, Math.min(300, nx));
+          if (b.road < 3) { const cq = clampRoad(b.road, nx, nz, 30); nx = cq[0]; nz = cq[1]; }
+          else { const cq = clampRoad(3, nx, nz, 120); nx = Math.max(30, Math.min(330, cq[0])); nz = cq[1]; }
           const mx = nx - b.x, mz = nz - b.z;
           b.x = nx; b.z = nz;
           if (Math.abs(mx) + Math.abs(mz) > 0.01) { b.yaw = Math.atan2(mx, mz); b.moving = 1; }
@@ -2454,6 +2609,7 @@ function update(dt) {
       const hand = {}; for (const k of SAVE.mteam.concat(SAVE.tteam)) hand[k] = used[k] ? 0 : 1;
       G.hand = hand;
       for (const b of G.rooms) if (b) { b.hp = b.maxHp; b.x = b.hx; b.z = b.hz; b.d = b.homeD; b.spent = false; if (b.rush) { b.rush = false; b.road = b.homeRoad; } }
+      if (G.endless) endlessRelayout();
       G.parties = []; G.plan = planWave();
       G.moveCd = 0; camTo('prep', 1.2);
       say('웨이브 돌파! 수정 +' + WAVE_GEMS + ' · 권속 회복 · 함정 재장전');
@@ -3819,28 +3975,32 @@ function drawScene() {
     }
   };
   for (let r = 0; r < 3; r++) {
-    const rx = ROAD_X[r], pp = ROADS[r].pts, last = pp.length - 2;
+    const pp = ROADS[r].pts, last = ROADS[r].nPre;   /* 합류(merge) → 몸통 입구(join)까지 */
     for (let i = 0; i < last; i++) {
       const L0 = Math.hypot(pp[i + 1][0] - pp[i][0], pp[i + 1][1] - pp[i][1]);
-      roadSeg(pp[i][0], i === 0 ? pp[i][1] + 10 : pp[i][1], pp[i + 1][0], pp[i + 1][1], (i === 0 || i === last - 1) ? 58 : 74, Math.max(3, Math.ceil(L0 / 36)), r);
+      roadSeg(pp[i][0], i === 0 ? pp[i][1] + 10 : pp[i][1], pp[i + 1][0], pp[i + 1][1], (i === 0 || i === last - 1) ? 58 : 74, Math.max(1, Math.ceil(L0 / 36)), r);
     }
     /* 길목 기둥과 횃불 */
-    for (const sx of [-1, 1]) for (const pz of [FORK_Z + 4, MERGE_Z - 4]) {
-      const px = rx + sx * 46;
-      pushBox(px, 18, pz, 14, 40, 14, '#241d38');
-      const g = 0.6 + Math.sin(T * 4 + px + pz) * 0.3;
-      pushBox(px, 42, pz, 9, 10, 9, dk(ZCOL[r][1], 0.7 + g * 0.5));
+    for (const dd of [ROADS[r].dFork + 4, ROADS[r].dMerge - 4]) {
+      const q = pathPos(r, dd), t = roadDir(r, dd);
+      for (const sx of [-1, 1]) {
+        const px = q[0] + t[1] * sx * 46, pz = q[1] - t[0] * sx * 46;
+        pushBox(px, 18, pz, 14, 40, 14, '#241d38');
+        const g = 0.6 + Math.sin(T * 4 + px + pz) * 0.3;
+        pushBox(px, 42, pz, 9, 10, 9, dk(ZCOL[r][1], 0.7 + g * 0.5));
+      }
     }
   }
-  roadSeg(180, JOIN_Z, 180, Z_END, 90, 6, 3);
+  { const pp = ROADS[0].pts; for (let i = ROADS[0].nPre; i < pp.length - 1; i++) { const L0 = Math.hypot(pp[i + 1][0] - pp[i][0], pp[i + 1][1] - pp[i][1]); const ring = LAYOUT.loop && i > ROADS[0].nPre && i < pp.length - 3; roadSeg(pp[i][0], pp[i][1], pp[i + 1][0], pp[i + 1][1], ring ? 50 : 90, Math.max(1, Math.ceil(L0 / (ring ? 16 : 40))), 3); } }   /* 고리 구간은 좁게 */
   /* 관문 장식 */
   for (const q of G.decor) pushBox(q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7]);
   /* 지형 */
   for (const f of G.feats) {
     const g = 0.6 + Math.sin(T * 3 + f.z) * 0.3;
-    if (f.t === 'choke') for (const sd of [-1, 1]) pushBox(f.x + sd * 26, 10, f.z, 16, 32, FEAT_R * 2, '#2e2640');
-    else if (f.t === 'swamp') { pushBox(f.x, 1.6, f.z, f.road === 3 ? 110 : 66, 1, FEAT_R * 2, '#203a24'); pushBox(f.x - 10, 2.4, f.z + 6, 6, 1, 6, dk('#4a8a4a', 0.6 + g * 0.3)); }
-    else if (f.t === 'altar') { const ax = f.x + (f.road === 3 ? 62 : 46); pushBox(ax, -2, f.z, 18, 16, 18, '#2a2234'); pushBox(ax, 8, f.z, 10, 4, 10, dk(FEAT.altar.col, 0.6 + g * 0.5)); }
+    const ny = Math.cos(f.yaw || 0), nzz = -Math.sin(f.yaw || 0);   /* 길 방향의 옆 */
+    if (f.t === 'choke') for (const sd of [-1, 1]) pushBox(f.x + ny * sd * 26, 10, f.z + nzz * sd * 26, 16, 32, FEAT_R * 2, '#2e2640', f.yaw || 0);
+    else if (f.t === 'swamp') { pushBox(f.x, 1.6, f.z, f.road === 3 ? 110 : 66, 1, FEAT_R * 2, '#203a24', f.yaw || 0); pushBox(f.x - 10, 2.4, f.z + 6, 6, 1, 6, dk('#4a8a4a', 0.6 + g * 0.3)); }
+    else if (f.t === 'altar') { const ao = f.road === 3 ? 62 : 46, ax = f.x + ny * ao, az = f.z + nzz * ao; pushBox(ax, -2, az, 18, 16, 18, '#2a2234'); pushBox(ax, 8, az, 10, 4, 10, dk(FEAT.altar.col, 0.6 + g * 0.5)); }
   }
   /* 거점 발판 */
   for (const o of OUTPOSTS) {
@@ -3983,6 +4143,7 @@ function drawScene() {
     }
     ctx.restore();
   }
+  drawSegBanner();
   if (DBG.on) drawDebug();
   /* 교전 중인 자리: 붉은 원 */
   for (const P of G.parties) if (P.fight) {
@@ -4080,7 +4241,7 @@ function drawPreview() {
   if (G.phase !== 'prep' || !G.plan) return;
   for (let r = 0; r < 3; r++) {
     const P = G.plan.find(p => p.road === r);
-    const q = proj(ROAD_X[r], 4, FORK_Z - 40); if (!q) continue;
+    const e0 = pathPos(r, ROADS[r].dFork - 40), q = proj(e0[0], 4, e0[1]); if (!q) continue;
     const cw = 58, cx = Math.max(cw / 2 + 3, Math.min(W - cw / 2 - 3, q[0]));
     const cnt = {}, order = [];
     if (P) for (const m of P.members) { const k = m.type + (m.af ? ':' + m.af : ''); if (!cnt[k]) { cnt[k] = 0; order.push(k); } cnt[k]++; }
@@ -4147,7 +4308,7 @@ function drawGame() {
   if (tog) btn(x0 + list.length * (bw + gp), PANEL_Y + 6, bw, 58, G.trapOpen ? '◀ 권속' : '함정 ' + placedT.length, () => { G.trapOpen = !G.trapOpen; },
                { bg:G.trapOpen ? '#3a2a56' : '#241d2e', fs:bw < 44 ? 9 : 11, sub:G.trapOpen ? '' : '목록', sc:'#c9b8ff' });
   list.forEach((k, i) => {
-    const d = DEF[k], left = G.hand[k] || 0, ok = left > 0 && G.sel >= 0 && !G.rooms[G.sel];
+    const d = DEF[k], left = G.hand[k] || 0, bad = G.sel >= 0 && !G.rooms[G.sel] && left > 0 && !roomOk(k, G.sel), ok = left > 0 && G.sel >= 0 && !G.rooms[G.sel] && !bad;
     const x = x0 + i * (bw + gp), y = PANEL_Y + 6;
     const u = d.kind === 'minion' ? G.rooms.find(b => b && b.key === k && !b.extra) : null, US = u ? uSkill(k) : null, act = US && US.act;
     const full = act && G.phase === 'run' && u.g >= 1;
@@ -4173,6 +4334,7 @@ function drawGame() {
     const hi = unitImg(k);
     if (hi) fitImg(ctx, hi, x + bw / 2, y + 44, bw - 6, 40);
     else ctx.drawImage(thumb(k), x + bw / 2 - 21, y + 3, 42, 42);
+    if (bad) { ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(40,8,12,.6)'; rbox(x, y, bw, 58, 7); ctx.fill(); txt('✕', x + bw / 2, y + 22, 18, '#ff6b6b', 'center'); txt('못 놓음', x + bw / 2, y + 46, 8, '#ff9a9a', 'center'); }   /* 이 칸에는 못 세운다 (누르면 이유) */
     ctx.globalAlpha = 1;
     const lvT = 'Lv' + (d.kind === 'minion' ? lvOf(k) : SAVE.own[k] || 1);
     /* 쓰러진 권속: 칸은 남기고 어둡게 (긴급 소환으로 되살아날 대상) */
@@ -4275,7 +4437,7 @@ function drawPause() {
 }
 /* 같은 관문을 처음부터 (행동력은 다시 쓰지 않는다) */
 function restartStage() {
-  const st = G.stage; buildMap(chapterOf(st)); reset(st); camSnap('prep');
+  const st = G.stage; buildMap(layoutFor(st, 1)); reset(st); camSnap('prep');
 }
 /* 진동: 설정에서 끌 수 있다. 앱에서는 네이티브, 브라우저에서는 navigator.vibrate */
 let buzzT = 0;
@@ -4668,7 +4830,7 @@ function sev(k, a, b, amt, x) {
   if (q.length > 160) q.shift();
   q.push({ k, a, b, amt, x:x || {} });
 }
-function zoneOf(u, hero) { return hero ? (u.z >= MERGE_Z - 10 ? 3 : u.road) : u.road; }
+function zoneOf(u, hero) { return hero ? (onTrunk(u) ? 3 : u.road) : u.road; }
 function stgY(row) { return STG.y0 + STG.h - 36 - row * 12; }
 function sprH(u) { return Math.min(u.def.boss ? 132 : 100, u.def.sc * 1.9 * (u.scl || 1)) * (STG.fs || 1); }
 
@@ -4818,7 +4980,7 @@ function stageLayout(dt) {
   /* 배경이 앞장선 침입자를 따라 흐른다 */
   if (Hs.length) {
     const f = Hs.reduce((a, b) => (a.z > b.z ? a : b));
-    const tgt = z < 3 ? dOfZ(z, f.z) : f.z;
+    const tgt = z < 3 ? (f.d === undefined ? projD(z, f.x, f.z) : f.d) : f.z;
     STG.scroll += (tgt - STG.scroll) * Math.min(1, dt * 4);
   }
   STG.nH = Hs.length + overH; STG.nM = Ms.length + overM; STG.overH = overH; STG.overM = overM;
