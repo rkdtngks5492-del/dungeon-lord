@@ -37,3 +37,6 @@ const ENH = { max:10, per:0.05, cost:[100, 200, 400, 800], grow:1.5 };
 /* 광고 보상: ◆ (하루 횟수, 양), 무료 소환 횟수, 영혼석 (하루 횟수, 양) */
 const AD_DAILY_MAX = 5, AD_DAILY_GEMS = 150, AD_PULL_MAX = 3;
 const AD_SOUL = { max:3, amt:3 };
+
+/* 방치 보상: 분당 영혼석 생산량, 오프라인 최대 반영 시간 */
+const IDLE_SOUL_PER_MIN = 1, IDLE_MAX_HOURS = 8;

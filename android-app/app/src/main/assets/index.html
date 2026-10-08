@@ -1086,6 +1086,8 @@ function defaultSave() {
            dq:null, att:{ n:0, day:'' }, boxT:0, mailGot:{}, clr:{ s:{}, m:{} },
            /* 튜토리얼: s = 진행 단계(숫자) 또는 'done', seen = 기능 안내를 본 것, got = 무료 소환권 지급 여부 */
            tut:{ s:0, seen:{}, got:false }, tickets:0, segSeen:[],
+           /* 방치 보상: 마지막 접속 시각, 첫 설치 시각 */
+           lastSeen:0, installT:0,
            /* 경쟁전: 관문별 남은 수호석 최고 %, 마지막으로 제출한 점수, 첫 실행 제출 여부 */
            stoneBest:{}, rankSent:0, rankInit:false,
            /* 덱 1·2·3: mteam/tteam은 지금 고른 덱의 배열을 그대로 가리킨다 (linkDeck) */
@@ -1132,7 +1134,7 @@ function linkDeck(s) {
 }
 function selectDeck(i) { SAVE.deckI = i; linkDeck(SAVE); persist(); }
 let SAVE = loadSave();
-function persist() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); } catch (e) {} }
+function persist() { try { SAVE.lastSeen = Date.now(); localStorage.setItem(SAVE_KEY, JSON.stringify(SAVE)); } catch (e) {} }
 const CP_KEY = SAVE_KEY + '_cp';
 function cpSave() {
   if (scene !== 'game' || !G || G.phase === 'win' || G.phase === 'lose') { try { localStorage.removeItem(CP_KEY); } catch(e) {} return; }
@@ -3652,7 +3654,7 @@ function panel(x, y, w, h, title) {
 function drawModal() {
   if (!M) return;
   BTN = [];   /* 아래 화면 버튼은 막는다 */
-  ({ autoteam:mAutoTeam, trap:mTrap, confirm:mConfirm, depth:mDepth, rec:mRec, tip:mTip, help:mHelp, story:mStory, exit:mExit, stam:mStam, quest:mQuest, att:mAtt, box:mBox, mail:mMail, clear:mClear, unit:mUnit })[M.k](M);
+  ({ autoteam:mAutoTeam, trap:mTrap, confirm:mConfirm, depth:mDepth, rec:mRec, tip:mTip, help:mHelp, story:mStory, exit:mExit, stam:mStam, quest:mQuest, att:mAtt, box:mBox, mail:mMail, clear:mClear, unit:mUnit, idle:mIdle })[M.k](M);
   BTN.push({ x:0, y:0, w:W, h:H, act:() => {}, label:'팝업 바깥' });
 }
 function mStam(m) {
@@ -3715,6 +3717,25 @@ function mAtt() {
     txt((n + 1) + '일차 보상', 32, 462, 13, '#ffd35a');
     claimBtns(W - 32, 447, ATTEND[n], () => { SAVE.att.n = (n + 1) % ATTEND.length; SAVE.att.day = todayKey(); });
   } else txt('오늘 출석 완료! 내일 또 만나요', W / 2, 462, 13, '#6bdc7a', 'center');
+}
+function mIdle(m) {
+  panel(36, 178, W - 72, 300, '⏰ 방치 보상');
+  const h = Math.floor(m.sec / 3600), min = Math.floor((m.sec % 3600) / 60);
+  const timeStr = (h ? h + '시간 ' : '') + (min || 1) + '분';
+  txt('오프라인 ' + timeStr + ' 동안', W / 2, 242, 13, '#c9b8ff', 'center');
+  txt('영혼석을 모았어요!', W / 2, 268, 13, '#c9b8ff', 'center');
+  txt(CUR.soul.ico + ' +' + m.soul, W / 2, 322, 32, CUR.soul.col, 'center');
+  btn(56, 392, W - 112, 50, '수령하기', () => { SAVE.soul += m.soul; persist(); M = null; }, { bg:'#3a2a56', on:true, fs:16 });
+}
+function checkIdle() {
+  const now = Date.now();
+  if (!SAVE.installT) SAVE.installT = now;
+  const last = SAVE.lastSeen;
+  if (!last || last >= now) return;
+  const sec = Math.min((now - last) / 1000, IDLE_MAX_HOURS * 3600);
+  if (sec < 60) return;
+  const soul = Math.floor(sec / 60 * IDLE_SOUL_PER_MIN);
+  if (soul > 0) M = { k:'idle', sec, soul };
 }
 function mBox() {
   panel(36, 180, W - 72, 300, '접속 상자');
@@ -4849,6 +4870,7 @@ function loop(now) {
 camSnap('prep');
 rankBoot();
 cpLoad();
+checkIdle();
 requestAnimationFrame(loop);
 
 /* ================= 옆면 전투 무대 =================
