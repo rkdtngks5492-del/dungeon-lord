@@ -3813,12 +3813,18 @@ function foeIcon(t, cx, cy, r) {
   ctx.fillStyle = '#271f38'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill();
   ctx.strokeStyle = gradeCol(d); ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.stroke();
   const im = unitImg(t);
-  if (im) fitImg(ctx, im, cx, cy + r * 0.86, r * 1.66, r * 1.74); else txt(d.ico, cx, cy, r * 0.9, '#fff', 'center');
+  if (im) {
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, r - 1, 0, 7); ctx.clip();
+    const dw = r * 2.1, dh = im.naturalHeight * (dw / im.naturalWidth);
+    ctx.drawImage(im, cx - dw / 2, cy - r, dw, dh);
+    ctx.restore();
+  } else txt(d.ico, cx, cy, r * 0.9, '#fff', 'center');
 }
 /* 관문 카드 한 장. live = 가운데 카드(버튼이 살아 있음) */
 function stageCard(c, x, live) {
   const i = cardIdx(c), end = i === ENDLESS, S = end ? null : STAGES[i], open = stageOpen(i), done = !end && SAVE.cleared > i;
-  const ch = end ? 3 : S.ch, col = CHCOL[ch], y0 = 132, h = 470;
+  const ch = end ? 3 : S.ch, col = CHCOL[ch], y0 = 132, h = 486;
   const B = (bx, by, w, hh, label, act, o) => { if (live) btn(bx, by, w, hh, label, act, o); else { const keep = BTN.length; btn(bx, by, w, hh, label, act, o); BTN.length = keep; } };
   ctx.save();
   /* 바탕: 어두운 보라 석판 + 장 색 테두리 */
@@ -3846,18 +3852,18 @@ function stageCard(c, x, live) {
   F.mobs.forEach((t, j) => { const cx = L + 30 + j * 67; foeIcon(t, cx, y0 + 108, 22); txt(DEF[t].name, cx, y0 + 140, 9, '#e8e0f8', 'center'); });
   /* 보스는 따로 */
   let y = y0 + 154;
-  ctx.fillStyle = F.bosses.length ? 'rgba(255,154,74,.10)' : 'rgba(255,255,255,.03)'; rbox(L, y, CARD_W - 32, 46, 8); ctx.fill();
+  ctx.fillStyle = F.bosses.length ? 'rgba(255,154,74,.10)' : 'rgba(255,255,255,.03)'; rbox(L, y, CARD_W - 32, 62, 8); ctx.fill();
   if (F.bosses.length) {
-    ctx.strokeStyle = 'rgba(255,154,74,.5)'; ctx.lineWidth = 1; rbox(L, y, CARD_W - 32, 46, 8); ctx.stroke();
-    txt('👑', L + 14, y + 23, 15, '#fff', 'center');
-    F.bosses.slice(0, 4).forEach((t, j) => foeIcon(t, L + 46 + j * 38, y + 23, 16));
-    const nm = F.bosses.slice(0, 2).map(t => DEF[t].name).join(' · ') + (F.bosses.length > 2 ? ' 외' : '');
-    txt(nm, R - 6, y + 16, 10, '#ffb27a', 'right');
-    txt(S && S.boss ? '보스 관문' : '보스급 용사 등장', R - 6, y + 32, 9, '#c9a080', 'right');
-  } else txt('보스 없음', L + (CARD_W - 32) / 2, y + 23, 10, '#6b5a85', 'center');
+    ctx.strokeStyle = 'rgba(255,154,74,.5)'; ctx.lineWidth = 1; rbox(L, y, CARD_W - 32, 62, 8); ctx.stroke();
+    txt('👑', L + 14, y + 20, 15, '#fff', 'center');
+    const bshow = F.bosses.slice(0, 3);
+    bshow.forEach((t, j) => { foeIcon(t, L + 46 + j * 38, y + 20, 16); txt(DEF[t].name, L + 46 + j * 38, y + 48, 8, '#ffb27a', 'center'); });
+    if (F.bosses.length > 3) { txt('+' + (F.bosses.length - 3), L + 46 + 3 * 38, y + 20, 11, '#ffd35a', 'center'); txt('+' + (F.bosses.length - 3) + '명', L + 46 + 3 * 38, y + 48, 8, '#ffd35a', 'center'); }
+    txt(S && S.boss ? '보스 관문' : '보스급', R - 6, y + 20, 9, '#c9a080', 'right');
+  } else txt('보스 없음', L + (CARD_W - 32) / 2, y + 31, 10, '#6b5a85', 'center');
   if (!end && NAMED_POOL[i]) txt('⚠ 네임드 용사 등장', R, y0 + 72, 9, NAMED_AFFIX.col, 'right');
   /* 웨이브 · 수호석 · 지형 */
-  y = y0 + 218;
+  y = y0 + 234;
   const chip = (cx, label, val, vc) => {
     ctx.fillStyle = '#1c1628'; rbox(cx, y, 86, 34, 7); ctx.fill();
     txt(label, cx + 43, y + 11, 8, '#8a7aa5', 'center'); txt(val, cx + 43, y + 25, 12, vc, 'center');
@@ -3868,7 +3874,7 @@ function stageCard(c, x, live) {
   chip(L + 184, '지형', feats.length ? Array.from(new Set(feats)).join('·') : '-', '#9ae8b5');
   if (!end) {
     /* 보상 칸: 돌파하면 늘어나는 편성 칸 */
-    y = y0 + 262;
+    y = y0 + 278;
     txt('보상 칸', L, y + 8, 11, '#c9b8ff');
     const slots = [];
     if (mSlots(i + 1) > mSlots(i)) slots.push(['권속 칸 +1', '#8be9ff']);
@@ -3877,7 +3883,7 @@ function stageCard(c, x, live) {
     if (!slots.length) txt('없음', L + 56, y + 8, 10, '#6b5a85');
     slots.forEach(([t, c2], j) => { ctx.fillStyle = c2 + '22'; rbox(L + 56 + j * 76, y, 72, 17, 8); ctx.fill(); txt(t, L + 92 + j * 76, y + 9, 9, c2, 'center'); });
     /* 별 도전 보상 */
-    y = y0 + 282;
+    y = y0 + 298;
     const got = starsOf(i), claimed = SAVE.clr.s[i] || 0, bw = (CARD_W - 32 - 12) / 3;
     txt('별 도전 보상', L, y + 6, 11, '#c9b8ff');
     for (let s2 = 0; s2 < 3; s2++) {
@@ -3891,7 +3897,7 @@ function stageCard(c, x, live) {
       txt(ok ? (claimed > s2 ? '획득 완료' : '받기 가능 🏁') : '미획득', bx + bw / 2, by + 68, 8, ok ? (claimed > s2 ? '#6bdc7a' : '#ffd35a') : '#6b5a85', 'center');
     }
     /* 첫 돌파 보상 */
-    y = y0 + 378;
+    y = y0 + 394;
     ctx.fillStyle = '#1c1628'; rbox(L, y, CARD_W - 32, 24, 7); ctx.fill();
     txt('첫 돌파', L + 10, y + 12, 10, '#c9b8ff');
     txt(CUR.gem.ico + S.gems, L + 58, y + 12, 11, CUR.gem.col);
@@ -4863,7 +4869,8 @@ function sev(k, a, b, amt, x) {
 }
 function zoneOf(u, hero) { return hero ? (onTrunk(u) ? 3 : u.road) : u.road; }
 function stgY(row) { return STG.y0 + STG.h - 36 - row * 12; }
-function sprH(u) { return Math.min(u.def.boss ? 132 : 100, u.def.sc * 1.9 * (u.scl || 1)) * (STG.fs || 1); }
+const SPR_SC = { N:1.0, R:1.1, SR:1.2, SSR:1.3, mob:1.0, knight:1.1, hero:1.2, boss:1.3 };
+function sprH(u) { return Math.min(u.def.boss ? 132 : 100, u.def.sc * 1.9 * (u.scl || 1)) * (STG.fs || 1) * (SPR_SC[u.def.rar || u.def.tier] || 1.0); }
 
 /* ---------- 배경 (구역마다 한 번만 만들어 두고 옆으로 흘린다) ---------- */
 function stageBg(z) {
