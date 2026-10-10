@@ -62,5 +62,13 @@ const GRADE = {
   mid:  { name:'정예', col:'#c77dff' },
   hero: { name:'전설', col:'#ffd35a' },
 };
-/* 5·10·15관문 보스 웨이브에 함께 오는 진짜 용사 무리 (관문 번호는 0부터) */
-const HERO_PARTY = { 4:['brave'], 9:['brave', 'saint'], 14:['brave', 'saint', 'swordmaster', 'legend'] };
+/* 보스 관문에 함께 오는 진짜 용사 무리 (관문 번호는 0부터) */
+const HERO_PARTY = {
+  4:['brave'],
+  9:['brave', 'saint'],
+  14:['brave', 'saint', 'swordmaster', 'legend'],
+  23:['brave', 'saint', 'swordmaster', 'sage'],
+  32:['brave', 'saint', 'swordmaster', 'sage', 'heroking'],
+  41:['brave', 'saint', 'swordmaster', 'sage', 'heroking', 'dragonknight'],
+  49:['brave', 'saint', 'swordmaster', 'sage', 'heroking', 'dragonknight', 'lordhunter'],
+};
