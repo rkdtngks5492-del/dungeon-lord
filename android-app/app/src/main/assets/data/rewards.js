@@ -5,13 +5,23 @@
 
 /* 일일 퀘스트: 매일 자정 초기화. id는 게임 코드가 진행도를 올릴 때 쓰는 이름이라 바꾸지 말 것 */
 const DAILY_QUESTS = [
-  { id:'clear', name:'관문 3회 클리어',  need:3,  reward:{ gems:50 } },
-  { id:'kill',  name:'용사 20명 처치',   need:20, reward:{ gems:50 } },
-  { id:'pull',  name:'권속 소환 3회',    need:3,  reward:{ gems:50 } },
-  { id:'ad',    name:'광고 1회 시청',    need:1,  reward:{ gems:50 } },
-  { id:'deck',  name:'덱 편성 변경 1회', need:1,  reward:{ gems:50 } },
+  { id:'clear', name:'관문 3회 클리어',  need:3,  reward:{ gems:50, soul:2 } },
+  { id:'kill',  name:'용사 20명 처치',   need:20, reward:{ gems:50, soul:2 } },
+  { id:'pull',  name:'권속 소환 3회',    need:3,  reward:{ gems:50, soul:2 } },
+  { id:'ad',    name:'광고 1회 시청',    need:1,  reward:{ gems:50, soul:2 } },
+  { id:'deck',  name:'덱 편성 변경 1회', need:1,  reward:{ gems:50, soul:2 } },
 ];
-const DAILY_ALL = { gems:150, soul:5 };   /* 5개 모두 완료 보너스 */
+const DAILY_ALL = { gems:150, soul:10 };   /* 5개 모두 완료 보너스 */
+
+/* 주간 퀘스트: 매주 월요일 자정 초기화. id는 'w_'로 시작 */
+const WEEKLY_QUESTS = [
+  { id:'w_clear',  name:'관문 10회 클리어',  need:10, reward:{ gems:120, soul:5 } },
+  { id:'w_summon', name:'권속 소환 30회',    need:30, reward:{ gems:120, soul:5 } },
+  { id:'w_trap',   name:'함정 배치 50회',    need:50, reward:{ gems:120, soul:5 } },
+  { id:'w_kill',   name:'용사 100명 처치',   need:100,reward:{ gems:120, soul:5 } },
+  { id:'w_deck',   name:'덱 편성 변경 5회',  need:5,  reward:{ gems:120, soul:5 } },
+];
+const WEEKLY_ALL = { gems:500, soul:30 };   /* 5개 모두 완료 주간 보너스 */
 
 /* 출석: 7일 주기, 하루 1번 (연속이 아니어도 됨). 7일차를 받으면 1일차로 돌아간다 */
 const ATTEND = [

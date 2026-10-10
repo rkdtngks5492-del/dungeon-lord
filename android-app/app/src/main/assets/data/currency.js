@@ -29,6 +29,10 @@ const CARD_PACK = { n:5, soul:45 };
 
 /* 광고 제거 패키지. id는 Play Console 인앱 상품 ID와 같아야 한다. price는 표시용 (실제 가격은 스토어가 정함) */
 const NO_ADS = { id:'remove_ads', price:'₩3,900' };
+/* 스타터 팩: 수정 300 + 영혼석 50 (1회 구매) */
+const STARTER_PACK = { id:'starter_pack', price:'₩1,100', gems:300, soul:50 };
+/* 마왕 패스: 매일 수정 50 + 영혼석 10 + 광고 제거 포함 (월정액, 구독) */
+const LORD_PASS = { id:'lord_pass_monthly', price:'₩4,900/월', dailyGems:50, dailySoul:10 };
 
 /* 함정 강화 (◆): 1단계에서 시작해 최대 10단계, 단계마다 공격력 +5%.
    cost[0] = 1→2단계, cost[1] = 2→3단계 ... 표가 끝나면 마지막 값에 grow를 계속 곱한다 (4→5 이후 ×1.5씩) */
