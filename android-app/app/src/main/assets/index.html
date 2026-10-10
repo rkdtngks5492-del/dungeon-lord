@@ -485,25 +485,25 @@ function roadCx(r, z) { return pathPos(r, dOfZ(r, z))[0]; }
    merge 합류(마지막 구간에서 하나로) / loop 순환(합류 뒤 고리를 한 바퀴 돌아 나옴 → 같은 함정을 두 번 지난다) / maze 미로(조각 조합)
    같은 구간의 관문끼리는 같은 구도에 씨앗으로 세부만 바뀐다. 테마(바닥·길 색)는 구간마다 다르다 (1~3구간은 예전 장 테마 그대로) */
 const MAPCFG = [
-  { kind:'basic',  name:'던전 외곽',   hint:'세 갈래 길목을 막아라',
+  /* 0: 1~5관 */ { kind:'basic',  name:'던전 외곽',   label:'3갈래 길', hint:'세 갈래 길목을 막아라',
     tile:['#140e1f', '#171024'], road:['#2e2545', '#2a2140'], sky:'#06030b', tint:null },
-  { kind:'cross',  name:'지하 성채',   hint:'교차로를 지켜라',
+  /* 1: 6~10관 */ { kind:'cross',  name:'지하 성채',   label:'십자형', hint:'교차로에서 맞부딪혀라',
     tile:['#1c100f', '#211412'], road:['#3a2b30', '#34262b'], sky:'#0b0405', tint:'rgba(255,90,40,.10)' },
-  { kind:'detour', name:'심연의 심장', hint:'굽은 길목마다 병목과 함정을 깔아라',
+  /* 2: 11~15관 */ { kind:'detour', name:'심연의 나선', label:'나선형', hint:'바깥에서 안으로 감기는 긴 길을 막아라',
     tile:['#0e1a1c', '#112024'], road:['#24383f', '#203339'], sky:'#03080a', tint:'rgba(60,200,220,.10)' },
-  { kind:'merge',  name:'망자의 묘역', hint:'마지막 합류 지점에 힘을 모아라',
+  /* 3: 16~20관 */ { kind:'cross',  name:'이중 루프 성채', label:'이중루프', hint:'두 경로가 중간에 만났다 다시 갈라진다',
     tile:['#121812', '#161e16'], road:['#2c3a2a', '#283425'], sky:'#030603', tint:'rgba(120,200,90,.08)' },
-  { kind:'loop',   name:'피의 회랑',   hint:'고리를 도는 침입자는 같은 함정을 두 번 밟는다',
+  /* 4: 21~25관 */ { kind:'merge',  name:'넓은 대로',   label:'넓은 1길', hint:'하나로 합쳐지는 넓은 길, 중앙 수정구를 지켜라',
     tile:['#1c0c14', '#221018'], road:['#40202c', '#3a1c28'], sky:'#0a0206', tint:'rgba(220,40,80,.10)' },
-  { kind:'maze',   name:'공허의 미궁', hint:'층마다 길이 뒤섞인다',
+  /* 5: 26~30관 */ { kind:'maze',   name:'공허의 미궁', label:'미로형', hint:'격자로 얽힌 길 — 어디서 튀어나올지 모른다',
     tile:['#0c0a1a', '#100e22'], road:['#26224a', '#221e42'], sky:'#020108', tint:'rgba(140,100,255,.12)' },
-  { kind:'cross',  name:'용암 동굴',   hint:'갈림길마다 흐르는 용암을 막아라',
+  /* 6: 31~35관 */ { kind:'maze',   name:'역방향 혼합', label:'역방향 혼합', hint:'일부 침입자가 후방에서 진입한다! 뒤를 지켜라', reverse:true,
     tile:['#200c07', '#280e08'], road:['#4a1a0a', '#421506'], sky:'#0a0200', tint:'rgba(255,80,20,.14)' },
-  { kind:'detour', name:'고대 유적',   hint:'굽어진 고대의 통로를 봉쇄하라',
+  /* 7: 36~40관 */ { kind:'detour', name:'고대 유적',   label:'나선형', hint:'굽어진 고대의 통로를 봉쇄하라',
     tile:['#1a160a', '#201c0c'], road:['#3c3214', '#362c10'], sky:'#060400', tint:'rgba(210,180,80,.09)' },
-  { kind:'merge',  name:'얼음 요새',   hint:'합류 지점에서 냉기의 군주를 막아라',
+  /* 8: 41~45관 */ { kind:'merge',  name:'얼음 요새',   label:'넓은 1길', hint:'합류 지점에서 냉기의 군주를 막아라',
     tile:['#0a1422', '#0c1828'], road:['#182c44', '#14263c'], sky:'#020508', tint:'rgba(80,190,255,.12)' },
-  { kind:'maze',   name:'암흑 신전',   hint:'뒤엉킨 어둠의 신전을 지켜라',
+  /* 9: 46~50관 */ { kind:'maze',   name:'암흑 신전',   label:'미로형', hint:'뒤엉킨 어둠의 신전을 지켜라',
     tile:['#120820', '#160a28'], road:['#2a1248', '#241040'], sky:'#06020c', tint:'rgba(180,60,255,.14)' },
 ];
 const ENDLESS = -1;   /* 무한 모드의 관문 번호 */
@@ -518,7 +518,7 @@ function layoutFor(stage, fl) {
   const seg = segOf(stage, fl), seed = stage === ENDLESS ? (seg === 5 ? 1000 + fl : 500 + seg) : stage;
   const rnd = rng32(seed * 7907 + 11), j = a => (rnd() * 2 - 1) * a;
   const p = { seg, seed, kind:MAPCFG[seg].kind, rx:[275 + j(8), 180, 85 + j(8)], fork:112 + j(8), merge:470 + j(10), join:545, cross:null, wig:0, wigN:2, ph:rnd() * 2,
-              loop:false, opz:null, trapOps:false, chokes:[1, 2], crossT:0.5 };
+              loop:false, opz:null, trapOps:false, chokes:[1, 2], crossT:0.5, reverse:!!MAPCFG[seg].reverse };
   const K = p.kind === 'maze' ? ['cross', 'detour', 'merge', 'loop'].filter(() => rnd() < 0.6) : [p.kind];
   if (p.kind === 'maze' && !K.length) K.push(['cross', 'detour', 'merge', 'loop'][Math.floor(rnd() * 4)]);
   if (K.includes('cross')) { p.cross = 268 + j(12); p.merge = Math.max(p.merge, 500 + j(6)); p.chokes = [1, 2]; }
@@ -1332,7 +1332,16 @@ function levelUp(k) {
 function promote(k) {
   if (!canPromote(k)) { toast(starOf(k) >= STAR.max ? '최고 성급이에요' : '같은 권속 카드가 ' + promoNeed(k) + '장 필요해요'); return; }
   SAVE.cards[k] = cardsOf(k) - promoNeed(k); SAVE.star[k] = starOf(k) + 1; persist();
-  toast(DEF[k].name + ' ★' + starOf(k) + ' 승급! 최대 레벨 ' + lvCap(k)); SFX.reveal('SSR');
+  SFX.reveal('SSR');
+  /* 승급 이펙트 애니메이션 */
+  G.promoAnim = { k, star:starOf(k), t:0, particles:[], done:false };
+  /* 파티클 초기화 */
+  for (let i = 0; i < 60; i++) {
+    const a = Math.random() * Math.PI * 2, spd = 1.5 + Math.random() * 3.5;
+    G.promoAnim.particles.push({ x:W / 2, y:H / 2, vx:Math.cos(a) * spd, vy:Math.sin(a) * spd - 1.5,
+      life:1, maxLife:0.8 + Math.random() * 1.2, size:2 + Math.random() * 4,
+      col: i % 3 === 0 ? '#ffd35a' : i % 3 === 1 ? '#c77dff' : '#fff' });
+  }
 }
 function passOf(k) {
   const p = { hp:0, atk:0, dr:0, as:0, ls:0, gauge:0 }, T = USKILL[k];
@@ -1501,7 +1510,10 @@ function showCards(res) {
   persist(); L.result = res;
   SFX.pull();
   let top = 'N'; for (const o of res) if (RAR_RANK[DEF[o.key].rar] > RAR_RANK[top]) top = DEF[o.key].rar;
-  setTimeout(() => SFX.reveal(top), 260);
+  /* 소환 애니메이션 초기화 */
+  const n = res.length;
+  L.pullAnim = { t:0, n, revealed:0, cards:res.map(() => ({ t:0, flipped:false })), done:false, top };
+  setTimeout(() => SFX.reveal(top), n === 1 ? 600 : 1200 + n * 120);
 }
 function doPull(cat, n, free, cost) {
   const pool = cat === 'minion' ? MINIONS : TRAPSL.filter(trapOpen);
@@ -1759,7 +1771,7 @@ function fovNow() { return FOV + (420 - FOV) * STG.k; }
 
 /* ================= 상태 ================= */
 let scene = 'stages';
-const L = { msg:'카드를 눌러 덱을 편성하세요', result:null, tab:'minion', info:null, dex:'minion' };
+const L = { msg:'카드를 눌러 덱을 편성하세요', result:null, pullAnim:null, tab:'minion', info:null, dex:'minion' };
 let M = null;                                   /* 메뉴 위에 뜨는 팝업 { k:'stage'|'stam'|'quest'|'att'|'box'|'mail'|'clear', ... } */
 const TOAST = { msg:'', t:0 };
 function toast(m) { TOAST.msg = m; TOAST.t = 2.4; L.msg = m; }
@@ -1802,21 +1814,114 @@ function endlessRelayout() {
 function segBanner(seg) { G.banner = { t:0, seg }; SFX.roar && SFX.roar(); }
 function segIntro(i) {
   const seg = LAYOUT.seg; SAVE.segSeen = SAVE.segSeen || [];
-  if (i !== ENDLESS && seg > 0 && SAVE.segSeen.indexOf(seg) < 0) { SAVE.segSeen.push(seg); persist(); segBanner(seg); }
+  const firstTime = SAVE.segSeen.indexOf(seg) < 0;
+  if (firstTime && i !== ENDLESS && seg > 0) { SAVE.segSeen.push(seg); persist(); }
+  /* 관문 진입 시 항상 맵 유형 이름 표시 (처음이면 큰 배너, 재진입은 작은 라벨) */
+  G.banner = { t:0, seg, full: firstTime && seg > 0 };
+  if (firstTime && seg > 0 && SFX.roar) SFX.roar();
 }
 function drawSegBanner() {
   const B = G.banner; if (!B) return;
-  B.t += 1 / 60; const life = B.small ? 1.8 : 3.2; if (B.t > life) { G.banner = null; return; }
-  const a = Math.min(1, B.t / 0.3, (life - B.t) / 0.5), c = MAPCFG[B.seg];
+  B.t += 1 / 60;
+  const life = B.full ? 3.2 : 2.0;
+  if (B.t > life) { G.banner = null; return; }
+  const a = Math.min(1, B.t / 0.25, (life - B.t) / 0.4), c = MAPCFG[B.seg];
   ctx.save(); ctx.globalAlpha = a;
-  const y = 250, h = B.small ? 44 : 86;
-  ctx.fillStyle = 'rgba(8,4,14,.82)'; ctx.fillRect(0, y - h / 2, W, h);
-  ctx.fillStyle = c.road[0]; ctx.fillRect(0, y - h / 2, W, 2); ctx.fillRect(0, y + h / 2 - 2, W, 2);
-  if (B.small) txt('🌀 미궁의 길이 바뀌었다', W / 2, y, 13, '#c9b8ff', 'center');
-  else {
-    txt('⛏ 던전이 더 깊어졌다', W / 2, y - 24, 16, '#ffd35a', 'center');
-    txt(c.name, W / 2, y + 2, 12, '#e4d4ff', 'center');
-    txt(c.hint, W / 2, y + 24, 11, '#9ae8b5', 'center');
+  if (B.full) {
+    /* 처음 진입: 큰 배너 */
+    const y = 250, h = 90;
+    ctx.fillStyle = 'rgba(8,4,14,.86)'; ctx.fillRect(0, y - h / 2, W, h);
+    ctx.fillStyle = c.road[0]; ctx.fillRect(0, y - h / 2, W, 2); ctx.fillRect(0, y + h / 2 - 2, W, 2);
+    txt('⛏ 던전이 더 깊어졌다', W / 2, y - 26, 16, '#ffd35a', 'center');
+    txt(c.name, W / 2, y, 13, '#e4d4ff', 'center');
+    txt(c.hint, W / 2, y + 26, 11, '#9ae8b5', 'center');
+  } else {
+    /* 재진입: 맵 유형 라벨만 간략히 */
+    const y = 220, h = 48;
+    ctx.fillStyle = 'rgba(8,4,14,.80)'; ctx.fillRect(0, y - h / 2, W, h);
+    ctx.fillStyle = c.road[0]; ctx.fillRect(0, y - h / 2, W, 2); ctx.fillRect(0, y + h / 2 - 2, W, 2);
+    txt('🗺 ' + (c.label || c.name), W / 2, y - 8, 14, '#ffd35a', 'center');
+    txt(c.hint, W / 2, y + 14, 10, '#9ae8b5', 'center');
+  }
+  ctx.restore();
+}
+/* ================= 승급 이펙트 ================= */
+const PROMO_RAR_COL = { N:'#9aa0a6', R:'#5aa9ff', SR:'#c77dff', SSR:'#ffd35a' };
+const STAR_GRADE = ['', '일반', '희귀', '영웅', '전설', '전설+'];
+function drawPromoAnim() {
+  const A = G && G.promoAnim; if (!A) return;
+  A.t += 1 / 60;
+  /* 닫기 버튼 누른 뒤 페이드아웃 */
+  const fadeOut = A.done ? A.t - A.doneT : 0;
+  if (fadeOut > 0.5) { G.promoAnim = null; return; }
+  const globalAlpha = A.done ? Math.max(0, 1 - fadeOut / 0.4) : Math.min(1, A.t / 0.25);
+  ctx.save(); ctx.globalAlpha = globalAlpha;
+  /* 어두운 오버레이 */
+  ctx.fillStyle = 'rgba(4,2,10,.92)'; ctx.fillRect(0, 0, W, H);
+  /* 파티클 업데이트 및 그리기 */
+  ctx.globalAlpha = globalAlpha;
+  for (const p of A.particles) {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.06;
+    p.life -= 1 / 60 / p.maxLife;
+    if (p.life <= 0) continue;
+    ctx.globalAlpha = globalAlpha * Math.max(0, p.life) * 0.85;
+    ctx.fillStyle = p.col;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size * Math.max(0, p.life), 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = globalAlpha;
+  const d = DEF[A.k];
+  const rar = d.rar, rarCol = PROMO_RAR_COL[rar];
+  /* 카드 배경 */
+  const cx = W / 2, cy = H / 2 - 40, cw = 160, ch = 200, cr = 16;
+  ctx.shadowColor = rarCol; ctx.shadowBlur = 28;
+  ctx.fillStyle = '#1e1630'; rbox(cx - cw / 2, cy - ch / 2, cw, ch, cr); ctx.fill();
+  ctx.strokeStyle = rarCol; ctx.lineWidth = 3; rbox(cx - cw / 2, cy - ch / 2, cw, ch, cr); ctx.stroke();
+  ctx.shadowBlur = 0;
+  /* 유닛 이미지 또는 썸네일 */
+  const im = unitImg(A.k);
+  if (im) { ctx.globalAlpha = globalAlpha; fitImg(ctx, im, cx, cy + 40, cw - 20, 130); }
+  else { const tb = thumb(A.k); ctx.drawImage(tb, cx - 38, cy - 38, 76, 76); }
+  txt(d.name, cx, cy + 90, 14, '#fff', 'center');
+  txt(RAR_NAME[rar], cx, cy + 108, 11, rarCol, 'center');
+  /* 별 애니메이션: 0.4초 후 별이 하나씩 반짝이며 채워진다 */
+  const starDelay = 0.4, starInterval = 0.18;
+  const maxStar = A.star;
+  for (let i = 0; i < STAR.max; i++) {
+    const reveal = A.t - starDelay - i * starInterval;
+    const sx = cx - (STAR.max - 1) * 14 + i * 28, sy = cy - ch / 2 + 24;
+    const filled = i < maxStar;
+    if (!filled) { ctx.globalAlpha = globalAlpha * 0.25; txt('★', sx, sy, 20, '#fff', 'center'); }
+    else if (reveal >= 0) {
+      const flash = Math.max(0, 1 - reveal / 0.35);
+      ctx.globalAlpha = globalAlpha * (0.7 + flash * 0.3);
+      const sc = 1 + flash * 0.6;
+      ctx.save(); ctx.translate(sx, sy - 10); ctx.scale(sc, sc);
+      if (flash > 0.1) { ctx.shadowColor = rarCol; ctx.shadowBlur = 16 * flash; }
+      txt('★', 0, 0, 20, flash > 0.5 ? '#fff' : rarCol, 'center');
+      ctx.shadowBlur = 0; ctx.restore();
+    }
+    ctx.globalAlpha = globalAlpha;
+  }
+  /* 승급 성공 텍스트 */
+  const textReveal = A.t - starDelay - maxStar * starInterval;
+  if (textReveal > 0) {
+    const ta = Math.min(1, textReveal / 0.3);
+    ctx.globalAlpha = globalAlpha * ta;
+    const gradeName = STAR_GRADE[Math.min(maxStar, STAR_GRADE.length - 1)] || '';
+    txt('✦ 승급 성공! ✦', cx, cy + 140, 18, rarCol, 'center');
+    txt(d.name + ' ★' + maxStar + (gradeName ? ' · ' + gradeName : ''), cx, cy + 162, 12, '#e4d4ff', 'center');
+  }
+  /* 확인 버튼 */
+  ctx.globalAlpha = globalAlpha;
+  const btnReveal = A.t - starDelay - maxStar * starInterval - 0.5;
+  if (btnReveal > 0 && !A.done) {
+    const ba = Math.min(1, btnReveal / 0.3);
+    ctx.globalAlpha = globalAlpha * ba;
+    BTN.push({ x:cx - 60, y:H - 120, w:120, h:40, label:'_promoClose',
+      act:() => { A.done = true; A.doneT = A.t; } });
+    ctx.fillStyle = rarCol + '33'; rbox(cx - 60, H - 120, 120, 40, 10); ctx.fill();
+    ctx.strokeStyle = rarCol; ctx.lineWidth = 1.5; rbox(cx - 60, H - 120, 120, 40, 10); ctx.stroke();
+    txt('확인', cx, H - 94, 16, '#fff', 'center');
   }
   ctx.restore();
 }
@@ -2204,9 +2309,10 @@ function startWave() {
 /* 무리 하나를 입구에 세운다. 전열이 앞, 지원이 맨 뒤인 대형으로 함께 걷는다. */
 function spawnParty(pp) {
   const sc = waveMul();
-  /* 입구에서 갈림길까지의 빈 구간은 건너뛰고 갈림길 조금 앞에서 나타난다 */
-  const d0 = Math.max(46, ROADS[pp.road].dFork - ENTRY);
-  const P = { road:pp.road, d:d0, heroes:[], fight:false, live:0, sp:0, dAvg:d0 };
+  /* 역방향 혼합: 35%확률로 일부 무리가 합류 지점 뒤쪽(후방)에서 진입 */
+  const doReverse = LAYOUT && LAYOUT.reverse && Math.random() < 0.35;
+  const d0 = doReverse ? ROADS[pp.road].dMerge + 20 : Math.max(46, ROADS[pp.road].dFork - ENTRY);
+  const P = { road:doReverse ? 3 : pp.road, d:d0, heroes:[], fight:false, live:0, sp:0, dAvg:d0 };
   const order = pp.members.slice().sort((a, b) => FORM[DEF[b.type].role] - FORM[DEF[a.type].role]);
   const cnt = {};
   for (const m of order) {
@@ -3504,6 +3610,7 @@ function mRec(m) {
 
 function drawPullResult() {
   if (!L.result) return;
+  if (L.pullAnim && !L.pullAnim.done) return;   /* 애니메이션이 끝난 뒤에만 정적 결과 표시 */
   ctx.fillStyle = 'rgba(8,5,14,.95)'; ctx.fillRect(0, 0, W, H);
   txt('소환 결과', W / 2, 80, 22, '#ffd35a', 'center');
   const n = L.result.length, pr = n > 5 ? 5 : n, cw2 = 64, ch2 = 100, g = 5;
@@ -3523,6 +3630,107 @@ function drawPullResult() {
   });
   if (L.result.some(r => r.isNew)) txt('NEW 카드가 도감에 등록됐어요', W / 2, H - 100, 12, '#ff7ad9', 'center');
   txt('화면을 누르면 닫혀요', W / 2, H - 70, 13, '#ddd', 'center');
+}
+
+/* ================= 소환 애니메이션 ================= */
+function drawPullAnim() {
+  const A = L.pullAnim; if (!A || A.done) return;
+  A.t += 1 / 60;
+
+  /* 스킵: 탭하면 모든 카드 즉시 공개 */
+  if (A.skipAll) {
+    for (const c of A.cards) { c.t = 1; c.flipped = true; }
+    A.revealed = A.n;
+  }
+
+  /* x1: 0.3초 후 단일 카드 플립 */
+  /* x10: 0.5초 후 0.25초 간격으로 순서대로 플립 */
+  const startDelay = A.n === 1 ? 0.3 : 0.5;
+  for (let i = 0; i < A.n; i++) {
+    const flipStart = startDelay + i * (A.n === 1 ? 0 : 0.25);
+    const c = A.cards[i];
+    if (A.t >= flipStart) {
+      c.t = Math.min(1, c.t + 1 / 60 / 0.28);
+      if (c.t >= 0.5 && !c.flipped) { c.flipped = true; A.revealed++; }
+    }
+  }
+
+  /* 전설 플래시: SSR 카드 공개 시 화면 금빛 플래시 */
+  if (!A.legendFlash) A.legendFlash = 0;
+  for (let i = 0; i < A.n; i++) {
+    const c = A.cards[i];
+    if (c.flipped && !c.flashDone && DEF[L.result[i].key].rar === 'SSR') {
+      c.flashDone = true;
+      A.legendFlash = Math.max(A.legendFlash, 0.8);
+    }
+  }
+  A.legendFlash = Math.max(0, A.legendFlash - 1 / 60 / 0.6);
+
+  ctx.fillStyle = 'rgba(8,5,14,.96)'; ctx.fillRect(0, 0, W, H);
+
+  /* 전설 플래시 오버레이 */
+  if (A.legendFlash > 0) {
+    ctx.save(); ctx.globalAlpha = A.legendFlash * 0.55;
+    ctx.fillStyle = '#ffd35a'; ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+
+  const n = A.n, pr = n > 5 ? 5 : n, cw2 = 64, ch2 = 100, g = 5;
+  const rows = Math.ceil(n / pr), gy2 = H / 2 - (rows * (ch2 + g)) / 2;
+  txt('소환 중...', W / 2, 80, 22, '#ffd35a', 'center');
+
+  for (let i = 0; i < n; i++) {
+    const c = A.cards[i], r = L.result[i];
+    const row = Math.floor(i / pr), inR = Math.min(pr, n - row * pr);
+    const gx = (W - (inR * cw2 + (inR - 1) * g)) / 2 + (i % pr) * (cw2 + g), y = gy2 + row * (ch2 + g);
+    const cx2 = gx + cw2 / 2, cy2 = y + ch2 / 2;
+
+    ctx.save();
+    /* 플립 transform: scaleX 1→0→1, 중간에 카드 면이 바뀜 */
+    const flip = c.t;
+    const sx = flip < 0.5 ? 1 - flip * 2 : (flip - 0.5) * 2;
+    ctx.translate(cx2, cy2); ctx.scale(sx, 1); ctx.translate(-cx2, -cy2);
+
+    if (!c.flipped) {
+      /* 앞면: 물음표 카드 */
+      ctx.fillStyle = '#1a1230'; rbox(gx, y, cw2, ch2, 8); ctx.fill();
+      ctx.strokeStyle = '#4a3a63'; ctx.lineWidth = 1.5; rbox(gx, y, cw2, ch2, 8); ctx.stroke();
+      txt('？', cx2, cy2 + 6, 32, '#4a3a63', 'center');
+    } else {
+      /* 뒷면 공개: 등급 색상과 카드 내용 */
+      const d = DEF[r.key], col = RAR_COL[d.rar];
+      ctx.fillStyle = '#271f38'; rbox(gx, y, cw2, ch2, 8); ctx.fill();
+      /* 전설은 빛나는 테두리 */
+      if (d.rar === 'SSR') {
+        const grd = ctx.createLinearGradient(gx, y, gx + cw2, y + ch2);
+        grd.addColorStop(0, '#ffd35a'); grd.addColorStop(0.5, '#fff'); grd.addColorStop(1, '#ffd35a');
+        ctx.strokeStyle = grd; ctx.lineWidth = 3;
+      } else {
+        ctx.strokeStyle = col; ctx.lineWidth = RAR_RANK[d.rar] >= 2 ? 3 : 1.5;
+      }
+      rbox(gx, y, cw2, ch2, 8); ctx.stroke();
+      txt(RAR_NAME[d.rar], cx2, y + 11, 9, col, 'center');
+      const ri = unitImg(r.key);
+      if (ri) fitImg(ctx, ri, cx2, y + 70, cw2 - 10, 52);
+      else ctx.drawImage(thumb(r.key), cx2 - 29, y + 16, 58, 58);
+      txt(d.name, cx2, y + 78, 9, '#fff', 'center');
+      txt(r.isNew ? 'NEW' : r.card ? '카드 +1' : r.lvUp ? 'Lv.' + SAVE.own[r.key] : '◆+' + r.refund,
+          cx2, y + 92, 10, r.isNew ? '#ff7ad9' : r.card ? '#4ee06a' : '#8be9ff', 'center');
+    }
+    ctx.restore();
+  }
+
+  /* 모두 공개되면 확인 버튼 */
+  if (A.revealed >= n) {
+    const btnY = H - 90;
+    BTN.push({ x:W / 2 - 64, y:btnY, w:128, h:42, label:'_pullClose',
+      act:() => { A.done = true; L.pullAnim = null; } });
+    ctx.fillStyle = '#3a2a56'; rbox(W / 2 - 64, btnY, 128, 42, 12); ctx.fill();
+    ctx.strokeStyle = '#c77dff'; ctx.lineWidth = 1.5; rbox(W / 2 - 64, btnY, 128, 42, 12); ctx.stroke();
+    txt('확인', W / 2, btnY + 22, 16, '#fff', 'center');
+  } else {
+    txt('화면을 누르면 즉시 공개', W / 2, H - 65, 11, '#8a7aa5', 'center');
+  }
 }
 
 /* ================= 상점 ================= */
@@ -4779,7 +4987,7 @@ function mExit() {
 window.onBack = function () {
   if (ADV.on || ADV.wait) return;                         /* 광고 중에는 게임에 영향 없음 */
   if (tutGuiding()) return;                               /* 튜토리얼 안내 중에는 건너뛰기 버튼으로만 빠져나간다 */
-  if (L.result) { L.result = null; return; }
+  if (L.result) { L.result = null; L.pullAnim = null; return; }
   if (M) { M = null; return; }
   if (scene === 'game') {
     if (G.phase === 'win' || G.phase === 'lose') { goStages(); return; }
@@ -4798,6 +5006,8 @@ function draw() {
   scene === 'game' ? drawGame() : drawMenu();
   if (scene === 'game' && G.paused) drawPause();
   if (scene === 'game' && M) drawModal();
+  drawPromoAnim();   /* 승급 이펙트 — 씬에 상관없이 최상단에 그린다 */
+  drawPullAnim();    /* 소환 애니메이션 */
   tipCheck(); drawTut();
   advDraw();
 }
@@ -5046,8 +5256,18 @@ function tap(x, y) {
     for (const b of BTN) if (b.label && String(b.label).indexOf('광고') === 0 && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
     return;
   }
+  /* 승급 이펙트 오버레이 — 최우선 처리 */
+  if (G && G.promoAnim && !G.promoAnim.done) {
+    for (const b of BTN) if (b.label === '_promoClose' && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
+    return;
+  }
   if (scene !== 'game') {
-    if (L.result) { L.result = null; SFX.tap(); return; }
+    /* 소환 애니메이션 중: 버튼 처리 또는 스킵 */
+    if (L.pullAnim && !L.pullAnim.done) {
+      for (const b of BTN) if (b.label === '_pullClose' && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
+      L.pullAnim.skipAll = true; return;
+    }
+    if (L.result) { L.result = null; L.pullAnim = null; SFX.tap(); return; }
     for (const b of BTN) if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
     return;
   }
