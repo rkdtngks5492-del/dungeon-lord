@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+build/
+android-app/.gradle/
+android-app/build/
+
+# Keystore (보안)
+*.keystore
+*.jks
+
+# Local properties
+local.properties
+
+# Node
+node_modules/
+package-lock.json
+android-app/package-lock.json
+
+# IDE
+.idea/
+*.iml

@@ -44,3 +44,6 @@ const AD_SOUL = { max:3, amt:3 };
 
 /* 방치 보상: 분당 영혼석 생산량, 오프라인 최대 반영 시간 */
 const IDLE_SOUL_PER_MIN = 1, IDLE_MAX_HOURS = 8;
+
+/* 권속 강화: 같은 권속 카드 MENH.need장 합성 → +1단계 (최대 5단계, 단계마다 공격력 +10%) */
+const MENH = { max:5, need:3, per:0.10, cost:[200, 400, 800, 1600, 3200] };

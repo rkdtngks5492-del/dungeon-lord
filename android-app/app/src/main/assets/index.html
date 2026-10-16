@@ -452,7 +452,7 @@ const Z_START = 50, Z_END = 700;
 let FORK_Z = 112, MERGE_Z = 470, JOIN_Z = 545;
 const ROAD_X = [275, 180, 85];           /* 화면이 좌우 반전이라 A길이 화면 왼쪽 */
 const ROAD_NAME = ['A길', 'B길', 'C길'];
-const STONE = { x:180, z:716 };
+let STONE = { x:180, z:716 };
 const MAPC = { x:180, z:(Z_START + Z_END) / 2 };
 const ROADS = [{}, {}, {}];
 let OP_Z = [185, 300, 415];
@@ -506,6 +506,17 @@ const MAPCFG = [
   /* 9: 46~50관 */ { kind:'maze',   name:'암흑 신전',   label:'미로형', hint:'뒤엉킨 어둠의 신전을 지켜라',
     tile:['#120820', '#160a28'], road:['#2a1248', '#241040'], sky:'#06020c', tint:'rgba(180,60,255,.14)' },
 ];
+/* 8가지 전략 레이아웃 — stage % 8 로 선택 */
+const STRAT_LAYOUTS = [
+  { id:0, name:'고전적 방어',  hint:'세 갈래 길목을 막아라',                  label:'3갈래' },
+  { id:1, name:'역방향 기습',  hint:'적이 후방에서 진입한다! 뒤를 사수하라',  label:'역방향' },
+  { id:2, name:'포위 공격',    hint:'넓게 퍼진 광폭 길 — 중앙 수호석을 사수하라', label:'광폭 3갈래' },
+  { id:3, name:'협곡 전투',    hint:'두 길이 좁은 협곡에서 빠르게 합쳐진다',  label:'협곡' },
+  { id:4, name:'섬 요새',      hint:'섬을 휘감는 긴 길을 막아라',              label:'고리형' },
+  { id:5, name:'교차로 혼전',  hint:'교차로에서 맞부딪혀라',                   label:'교차로' },
+  { id:6, name:'어둠의 미궁',  hint:'격자로 얽힌 미로 — 어디서 나올지 모른다', label:'미로' },
+  { id:7, name:'삼각 분열',    hint:'수호석이 세 곳! 하나라도 무너지면 패배', label:'다중 수호석' },
+];
 const ENDLESS = -1;   /* 무한 모드의 관문 번호 */
 let MAPK = MAPCFG[0], MAPCH = 0, LAYOUT = null;
 /* 관문 i(무한 모드는 층 fl)의 구간 번호와 씨앗 */
@@ -528,6 +539,15 @@ function layoutFor(stage, fl) {
   else if (K.includes('loop')) K.splice(K.indexOf('loop'), 1);   /* 고리는 일찍 합류해야 해서 교차로·늦은 합류와 같이 못 넣는다 */
   if (p.kind === 'maze') p.chokes = [1, 3];
   p.parts = K;
+  /* 전략 레이아웃 오버라이드 */
+  const si = stage === ENDLESS ? (fl % 8) : (stage % 8);
+  p.strat = si;
+  if (si === 1) { p.reverse = true; p.forceAllReverse = true; }
+  else if (si === 2) { p.rx = [300 + j(5), 180, 60 + j(5)]; }
+  else if (si === 3) { p.cross = null; p.loop = false; p.merge = 265 + j(10); p.join = 310; p.crossT = 0.45; }
+  else if (si === 4) { p.loop = true; p.cross = null; p.merge = 340 + j(8); p.join = 378; p.wig = Math.max(p.wig, 28 + j(6)); p.wigN = 3; }
+  else if (si === 5) { p.cross = 268 + j(12); p.merge = Math.max(500, 500 + j(6)); }
+  else if (si === 7) { p.multiStone = true; p.loop = false; p.cross = null; p.reverse = false; p.forceAllReverse = false; p.merge = Z_END + 100; p.join = Z_END + 120; }
   return p;
 }
 /* 길 r의 꺾인 점들. 합류 전까지는 z가 계속 늘어나고(위→아래), 합류 뒤 몸통(trunk)은 고리처럼 거슬러 올라갈 수 있다 */
@@ -596,6 +616,9 @@ function buildMap(p) {
   if (typeof p === 'number') p = layoutFor(p, 1);
   LAYOUT = p; const c = MAPCFG[p.seg]; MAPK = c; MAPCH = p.seg;
   FORK_Z = p.fork; MERGE_Z = p.merge; JOIN_Z = p.join;
+  /* 전략 레이아웃별 수호석 위치 */
+  if (p.strat === 6) { STONE.x = 290; STONE.z = 700; }
+  else { STONE.x = 180; STONE.z = 716; }
   const tr = trunkPts(p);
   for (let r = 0; r < 3; r++) {
     const pre = roadPts(r, p), R = mkRoad(pre.concat(tr));
@@ -1073,7 +1096,7 @@ const STAGE_NAMES = ['바깥 통로', '지하 묘지', '돌의 회랑', '폐허�
                      /* 제7장: 암흑 신전 */
                      '독 늪지 입구', '저주의 습지', '공허의 문', '암흑 신전 통로',
                      '마왕의 요새', '어둠의 정점', '마왕의 전실', '심연의 군주 성채'];
-const STAGE_GEMS = [140, 200, 280, 380, 800, 600, 780, 1000, 1300, 2600, 1800, 2300, 2900, 3600, 7000,
+const STAGE_GEMS = [350, 500, 700, 950, 2000, 1500, 1950, 2500, 3250, 6500, 1800, 2300, 2900, 3600, 7000,
                     /* 제4장 */
                     4500, 5600, 7000, 8700, 10800, 13500, 16500, 20000, 45000,
                     /* 제5장 */
@@ -1142,9 +1165,13 @@ function makeEndlessWave(n) {
   if (n >= 1) out.push([mobs[n % mobs.length], 1 + Math.floor(n / 8), 1.4, affixFor(n)]);
   if (n >= 8 && n % 3 === 2) out.push([elites[Math.floor(n / 3) % elites.length], Math.max(1, Math.floor(n / 12)), 2.6, affixFor(n)]);
   if (n >= 14 && n % 4 === 2) out.push([bosses[Math.floor(n / 4) % bosses.length], 1, 3.0, affixFor(n)]);
+  if ((n + 1) % 10 === 0) {
+    const allBosses = ['brave','saint','swordmaster','sage','heroking','dragonknight','lordhunter','legend'];
+    out.push([allBosses[Math.floor((n + 1) / 10 - 1) % allBosses.length], 1, 4.0, 'elite']);
+  }
   return out;
 }
-function endlessMul(n) { return 1.2 * Math.pow(1.09, n); }
+function endlessMul(n) { return Math.pow(1.05, n); }
 const SKILLS = [
   { key:'roar',   name:'포효', cd:22, desc:'전체 피해 + 기절' },
   { key:'meteor', name:'운석', cd:18, aim:true, desc:'지정한 곳에 큰 광역 피해' },
@@ -1175,7 +1202,9 @@ function defaultSave() {
            /* 덱 1·2·3: mteam/tteam은 지금 고른 덱의 배열을 그대로 가리킨다 (linkDeck) */
            decks:[], deckI:0, lsort:'rar', lfilt:'all', lfirst:false,
            /* v4: 권속 성급·레벨·카드, 광고 제거, 일일 상자 */
-           star:{}, lv:{}, cards:{}, noAds:false, dbDay:'', dbAdDay:'', v4:true };
+           star:{}, lv:{}, cards:{}, noAds:false, dbDay:'', dbAdDay:'', v4:true, menh:{},
+           seasonPass:{ level:0, xp:0, premium:false, claimed:{}, startT:0 },
+           guild:{ joined:false, id:'', name:'', role:'member', contribution:0, weeklyClears:0, weeklyKey:'', treasuryClaimed:{}, weeklyBossKey:'', bossKills:0 } };
 }
 /* 옛 저장에는 새 항목이 없다. 없거나 모양이 다른 항목만 기본값으로 채운다 */
 function migrate(s) {
@@ -1192,6 +1221,7 @@ function migrate(s) {
   /* 튜토리얼이 생기기 전부터 하던 플레이어는 튜토리얼을 건너뛴 것으로 */
   if (!hadTut && ((s.battles | 0) > 0 || (s.cleared | 0) > 0)) s.tut = { s:'done', seen:{}, got:true };
   if (!s.tut.seen || typeof s.tut.seen !== 'object') s.tut.seen = {};
+  if (!s.menh || typeof s.menh !== 'object') s.menh = {};
   /* v4 전환: 예전 '중복 레벨(1~5)'은 승급 재료 카드로 돌려주고, 예전 강화 단계(+1~+10)는 레벨로 옮긴다 */
   if (!wasV4) {
     s.v4 = true;
@@ -1251,12 +1281,12 @@ function cpLoad() {
 
 /* ================= 화폐 · 행동력 · 강화 ================= */
 function grant(r, mul) {
-  const g = (r.gems || 0) * (mul || 1), s = r.soul || 0, cs = r.cards || [];
-  SAVE.gems += g; SAVE.soul += s;
+  const g = (r.gems || 0) * (mul || 1), s = r.soul || 0, cs = r.cards || [], tix = r.tickets || 0;
+  SAVE.gems += g; SAVE.soul += s; SAVE.tickets = (SAVE.tickets | 0) + tix;
   /* 권속 조각: 처음 받는 권속이면 첫 조각으로 합류하고, 나머지는 승급 카드가 된다 */
   for (const c of cs) for (let k = 0; k < c.n; k++) gainCard(c.key);
   persist(); SFX.reveal(s || cs.length ? 'SR' : 'R');
-  toast([g ? CUR.gem.ico + g : '', s ? CUR.soul.ico + s : ''].concat(cs.map(c => DEF[c.key].name + ' 조각 ' + c.n)).filter(Boolean).join(' + ') + ' 받았어요');
+  toast([g ? CUR.gem.ico + g : '', s ? CUR.soul.ico + s : '', tix ? '🎟×' + tix : ''].concat(cs.map(c => DEF[c.key].name + ' 조각 ' + c.n)).filter(Boolean).join(' + ') + ' 받았어요');
 }
 /* 보상 받기. ◆가 들어 있으면 광고를 보고 ◆만 2배로 받을 수 있다 (영혼석은 그대로) */
 function claim(r, ad, mark) {
@@ -1290,12 +1320,64 @@ function enhance(k) {
   SAVE.gems -= c; SAVE.enh[k] = e + 1; persist();
   toast(DEF[k].name + ' 강화 +' + (e + 1) + ' 성공!'); SFX.reveal('SR');
 }
+/* 권속 강화: 같은 카드 3장 합성 → +1단계, 최대 5단계, 공격력 단계마다 +10% */
+function menhLv(k) { return Math.max(0, Math.min(MENH.max, SAVE.menh[k] || 0)); }
+function menhCost(e) { return MENH.cost[Math.min(e, MENH.cost.length - 1)]; }
+function canEnhMinion(k) { return !!SAVE.own[k] && menhLv(k) < MENH.max && cardsOf(k) >= MENH.need; }
+function enhMinion(k) {
+  const e = menhLv(k);
+  if (e >= MENH.max) { toast('최대 강화 단계예요'); return; }
+  if (cardsOf(k) < MENH.need) { toast('같은 권속 카드 ' + MENH.need + '장이 필요해요 (' + cardsOf(k) + '장 보유)'); return; }
+  const c = menhCost(e); if (SAVE.gems < c) { toast(CUR.gem.name + '이 부족해요'); return; }
+  SAVE.gems -= c; SAVE.cards[k] = cardsOf(k) - MENH.need; SAVE.menh[k] = e + 1; persist();
+  SFX.reveal('SR');
+  /* 강화 반짝 이펙트 */
+  G.menhAnim = { k, lv:e + 1, t:0, particles:[], done:false };
+  for (let i = 0; i < 50; i++) {
+    const a = Math.random() * Math.PI * 2, spd = 1.5 + Math.random() * 3;
+    G.menhAnim.particles.push({ x:W/2, y:H/2, vx:Math.cos(a)*spd, vy:Math.sin(a)*spd-1.5,
+      life:1, maxLife:0.6+Math.random()*0.8, size:2+Math.random()*3.5,
+      col: i%3===0?'#ffd35a':i%3===1?'#8be9ff':'#fff' });
+  }
+  toast(DEF[k].name + ' 강화 ★' + (e + 1) + ' 성공!');
+}
+function drawMenhAnim() {
+  const A = G && G.menhAnim; if (!A) return;
+  A.t += 1 / 60;
+  const fadeOut = A.done ? A.t - A.doneT : 0;
+  if (fadeOut > 0.5) { G.menhAnim = null; return; }
+  const ga = A.done ? Math.max(0, 1 - fadeOut / 0.4) : Math.min(1, A.t / 0.2);
+  ctx.save(); ctx.globalAlpha = ga;
+  for (const p of A.particles) {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.07; p.life -= 1/60/p.maxLife;
+    if (p.life <= 0) continue;
+    ctx.globalAlpha = ga * Math.max(0, p.life) * 0.85;
+    ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, p.size*Math.max(0,p.life), 0, 7); ctx.fill();
+  }
+  ctx.globalAlpha = ga;
+  const d = DEF[A.k], col = RAR_COL[d.rar];
+  txt('★'.repeat(A.lv) + '☆'.repeat(MENH.max - A.lv), W/2, H/2 - 60, 24, '#ffd35a', 'center');
+  txt('✦ 강화 성공! ✦', W/2, H/2 - 30, 20, col, 'center');
+  txt(d.name + ' 강화 ★' + A.lv, W/2, H/2, 14, '#fff', 'center');
+  txt('공격력 +' + Math.round(MENH.per * A.lv * 100) + '%', W/2, H/2 + 22, 12, '#8be9ff', 'center');
+  const revBtn = A.t - 0.6;
+  if (revBtn > 0 && !A.done) {
+    ctx.globalAlpha = ga * Math.min(1, revBtn/0.3);
+    BTN.push({ x:W/2-50, y:H/2+50, w:100, h:36, label:'_menhClose', act:() => { A.done=true; A.doneT=A.t; } });
+    ctx.fillStyle = '#2a2140'; rbox(W/2-50, H/2+50, 100, 36, 10); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth=1.5; rbox(W/2-50, H/2+50, 100, 36, 10); ctx.stroke();
+    txt('확인', W/2, H/2+73, 14, '#fff', 'center');
+  }
+  ctx.restore();
+}
+
 /* 레벨(중복) × 강화 × 도감 보너스를 합친 능력치 배율 */
 function statMul(k) {
   const b = dexBonus();
   if (DEF[k].kind === 'trap') { const m = lvMult(SAVE.own[k] || 1) * (1 + ENH.per * (enhLv(k) - 1)); return { hp:m, dmg:m * (1 + b.trapDmg) }; }
   const p = passOf(k), m = Math.pow(1 + STAR.bonus, starOf(k) - 1) * (1 + LVUP.per * statLv(lvOf(k)));
-  return { hp:m * (1 + b.minHp + b.all + p.hp), dmg:m * (1 + b.minAtk + b.all + p.atk) };
+  const mEnhBonus = MENH.per * menhLv(k);
+  return { hp:m * (1 + b.minHp + b.all + p.hp), dmg:m * (1 + b.minAtk + b.all + p.atk + mEnhBonus) };
 }
 
 /* ================= 권속 성급 · 레벨 · 스킬 ================= */
@@ -1435,8 +1517,43 @@ function claimLordPassDaily() {
   toast('마왕 패스 일일 보상! ◆' + LORD_PASS.dailyGems + ' + ◈' + LORD_PASS.dailySoul);
 }
 function questAdd(id, n) {
-  if (id.startsWith('w_')) { const q = wq(); q.prog[id] = (q.prog[id] || 0) + (n || 1); return; }
-  const q = dq(); q.prog[id] = (q.prog[id] || 0) + (n || 1);
+  if (id.startsWith('w_')) {
+    const q = wq(), prev = q.prog[id] || 0; q.prog[id] = prev + (n || 1);
+    const quest = WEEKLY_QUESTS.find(function(qq) { return qq.id === id; });
+    if (quest && prev < quest.need && q.prog[id] >= quest.need) addSeasonXp(1);
+    return;
+  }
+  const q = dq(), prev = q.prog[id] || 0; q.prog[id] = prev + (n || 1);
+  const quest = DAILY_QUESTS.find(function(qq) { return qq.id === id; });
+  if (quest && prev < quest.need && q.prog[id] >= quest.need) addSeasonXp(1);
+}
+function addSeasonXp(n) {
+  const sp = SAVE.seasonPass;
+  if (!sp || sp.level >= SEASON_PASS.levels.length) return;
+  sp.xp = (sp.xp || 0) + n;
+  while (sp.level < SEASON_PASS.levels.length && sp.xp >= 1) { sp.xp -= 1; sp.level++; toast('시즌 패스 Lv.' + sp.level + ' 달성!'); }
+  persist();
+}
+function claimSeasonReward(lv, isPremium) {
+  const sp = SAVE.seasonPass;
+  if (!sp || sp.level < lv) return;
+  const key = (isPremium ? 'p' : 'f') + lv;
+  if (sp.claimed[key]) return;
+  if (isPremium && !sp.premium) { toast('프리미엄 패스가 필요해요'); return; }
+  const row = SEASON_PASS.levels.find(function(r) { return r.lv === lv; });
+  if (!row) return;
+  sp.claimed[key] = true; grant(isPremium ? row.premium : row.free); persist();
+  toast('시즌 패스 Lv.' + lv + ' 보상 수령!');
+}
+function seasonDaysLeft() {
+  const sp = SAVE.seasonPass;
+  if (!sp.startT) { sp.startT = Date.now(); persist(); }
+  return Math.max(0, Math.ceil((sp.startT + SEASON_PASS.duration * 86400000 - Date.now()) / 86400000));
+}
+function guildTreasuryCan() {
+  const g = SAVE.guild;
+  if (!g || !g.joined) return false;
+  return GUILD_TREASURY.some(function(item) { return (g.contribution || 0) >= item.cost && (g.treasuryClaimed[item.id] || 0) < item.weekly; });
 }
 function questDone(Q) { return (dq().prog[Q.id] || 0) >= Q.need; }
 function questCan(Q) { return questDone(Q) && !dq().got[Q.id]; }
@@ -1786,6 +1903,12 @@ function reset(stage) {
         hand, sel:-1, parties:[], pending:[], plan:null, waveT:0, speed:1, fx:[], parts:[], meteors:[], bolts:[], corpses:[], revive:[],
         msg:'빈 칸을 누르고 카드를 배치하세요', msgT:4, gems:0, done:false, doubled:false, usedContinue:false,
         scd, skc:{}, frenzy:0, seal:0, aim:null, moveFrom:-1, moveCd:0, hs:0, smites:[] };
+  /* 삼각 분열 레이아웃: 길마다 수호석 */
+  if (LAYOUT && LAYOUT.multiStone) {
+    const sHp = Math.round(stone * 0.4);
+    G.stones = [0,1,2].map(r => { const q = pathPos(r, ROADS[r].len - 12); return { hp:sHp, maxHp:sHp, x:q[0], z:q[1], road:r }; });
+    G.stone = sHp * 3; G.maxStone = sHp * 3;
+  }
   /* 관문 지형 + 함정 전용 칸 자리 */
   layoutFeats(stage);
   G.plan = planWave();
@@ -1816,9 +1939,10 @@ function segIntro(i) {
   const seg = LAYOUT.seg; SAVE.segSeen = SAVE.segSeen || [];
   const firstTime = SAVE.segSeen.indexOf(seg) < 0;
   if (firstTime && i !== ENDLESS && seg > 0) { SAVE.segSeen.push(seg); persist(); }
-  /* 관문 진입 시 항상 맵 유형 이름 표시 (처음이면 큰 배너, 재진입은 작은 라벨) */
-  G.banner = { t:0, seg, full: firstTime && seg > 0 };
-  if (firstTime && seg > 0 && SFX.roar) SFX.roar();
+  /* 전략 레이아웃은 항상 큰 배너로, 처음 보는 구간도 큰 배너 */
+  const hasSL = LAYOUT.strat !== undefined && LAYOUT.strat >= 0;
+  G.banner = { t:0, seg, full: hasSL || (firstTime && seg > 0), strat: hasSL ? LAYOUT.strat : -1 };
+  if ((hasSL || (firstTime && seg > 0)) && SFX.roar) SFX.roar();
 }
 function drawSegBanner() {
   const B = G.banner; if (!B) return;
@@ -1826,22 +1950,26 @@ function drawSegBanner() {
   const life = B.full ? 3.2 : 2.0;
   if (B.t > life) { G.banner = null; return; }
   const a = Math.min(1, B.t / 0.25, (life - B.t) / 0.4), c = MAPCFG[B.seg];
+  const sl = (B.strat >= 0) ? STRAT_LAYOUTS[B.strat] : null;
+  const dName = sl ? sl.name : c.name;
+  const dHint = sl ? sl.hint : c.hint;
+  const dLabel = sl ? sl.label : (c.label || c.name);
   ctx.save(); ctx.globalAlpha = a;
   if (B.full) {
-    /* 처음 진입: 큰 배너 */
+    /* 큰 배너: 전략 레이아웃명 표시 */
     const y = 250, h = 90;
     ctx.fillStyle = 'rgba(8,4,14,.86)'; ctx.fillRect(0, y - h / 2, W, h);
     ctx.fillStyle = c.road[0]; ctx.fillRect(0, y - h / 2, W, 2); ctx.fillRect(0, y + h / 2 - 2, W, 2);
-    txt('⛏ 던전이 더 깊어졌다', W / 2, y - 26, 16, '#ffd35a', 'center');
-    txt(c.name, W / 2, y, 13, '#e4d4ff', 'center');
-    txt(c.hint, W / 2, y + 26, 11, '#9ae8b5', 'center');
+    txt(sl ? '⚔ 레이아웃: ' + dName : '⛏ 던전이 더 깊어졌다', W / 2, y - 26, 16, sl ? '#ff9a4a' : '#ffd35a', 'center');
+    txt(sl ? c.name : dName, W / 2, y, 13, '#e4d4ff', 'center');
+    txt(dHint, W / 2, y + 26, 11, '#9ae8b5', 'center');
   } else {
     /* 재진입: 맵 유형 라벨만 간략히 */
     const y = 220, h = 48;
     ctx.fillStyle = 'rgba(8,4,14,.80)'; ctx.fillRect(0, y - h / 2, W, h);
     ctx.fillStyle = c.road[0]; ctx.fillRect(0, y - h / 2, W, 2); ctx.fillRect(0, y + h / 2 - 2, W, 2);
-    txt('🗺 ' + (c.label || c.name), W / 2, y - 8, 14, '#ffd35a', 'center');
-    txt(c.hint, W / 2, y + 14, 10, '#9ae8b5', 'center');
+    txt('🗺 ' + dLabel, W / 2, y - 8, 14, '#ffd35a', 'center');
+    txt(dHint, W / 2, y + 14, 10, '#9ae8b5', 'center');
   }
   ctx.restore();
 }
@@ -1931,7 +2059,7 @@ function startBattle(i) {
   if (!stageOpen(i)) { toast(i === ENDLESS ? '모든 관문을 돌파하면 열려요' : '앞 관문을 먼저 돌파해야 열려요'); return; }
   if (!SAVE.mteam.length) { toast('권속을 최소 1명은 편성해야 해요'); return; }
   if (stamNow() < STAM.cost) { M = { k:'stam', then:i }; return; }
-  SAVE.stam -= STAM.cost; persist(); M = null;
+  SAVE.stam -= STAM.cost; if (i !== ENDLESS) SAVE.lastStage = i; persist(); M = null;
   buildMap(layoutFor(i, 1)); reset(i); scene = 'game'; camSnap('prep'); segIntro(i);
   G.battleT = Date.now(); Analytics.log('stage_start', { stage_id: i });
 }
@@ -1942,9 +2070,16 @@ function finishBattle() {
     const reached = G.wIdx + (G.phase === 'lose' ? 0 : 1);
     G.reached = reached;
     G.bonus = reached * 14 + Math.floor(reached * reached * 0.8);
-    G.gems += G.bonus;
+    G.bossBonus = Math.floor(reached / 10) * 80;
+    G.gems += G.bonus + G.bossBonus;
     G.first = reached > SAVE.endlessBest;
     if (G.first) SAVE.endlessBest = reached;
+    if (SAVE.guild && SAVE.guild.joined) {
+      const gk = weekKey();
+      if (SAVE.guild.weeklyKey !== gk) { SAVE.guild.weeklyClears = 0; SAVE.guild.weeklyKey = gk; }
+      const contrib = Math.max(1, Math.floor(reached / 5));
+      SAVE.guild.weeklyClears += contrib; SAVE.guild.contribution = (SAVE.guild.contribution || 0) + contrib;
+    }
     SAVE.gems += G.gems; persist(); rankSubmit(); return;
   }
   if (G.phase === 'win') {
@@ -1957,13 +2092,29 @@ function finishBattle() {
       SAVE.cleared = Math.min(STAGES.length, G.stage + 1); grantUnlockedTraps();
       const soulRew = G.stage < 5 ? 3 : G.stage < 10 ? 5 : G.stage < 15 ? 8 : G.stage < 25 ? 12 : 18;
       G.soulBonus = soulRew; SAVE.soul += soulRew;
+      if (G.stage === 0) { G.gems += 500; G.firstBonus = 500; }
     }
     /* 별: 남은 수호석 비율로 1~3개 */
     const r = G.stone / G.maxStone;
     G.stars = CLEAR_REWARD.starAt.filter(a => r >= a).length;
+    /* 클리어 애니메이션 초기화 */
+    G.clearAnim = { t:0, stars:G.stars, particles:[] };
+    if (G.stars === 3) {
+      for (let i = 0; i < 80; i++) {
+        const a = Math.random() * Math.PI * 2, spd = 2 + Math.random() * 4;
+        G.clearAnim.particles.push({ x:W/2, y:H/3, vx:Math.cos(a)*spd, vy:Math.sin(a)*spd-2,
+          life:1, maxLife:0.8+Math.random()*1.4, size:2+Math.random()*4,
+          col:['#ffd35a','#fff','#ffaa00','#ffe080'][Math.floor(Math.random()*4)] });
+      }
+    }
     SAVE.stars[G.stage] = Math.max(SAVE.stars[G.stage] || 0, G.stars);
     rankRecordStage(G.stage, r * 100);
     questAdd('clear'); questAdd('w_clear');
+    if (SAVE.guild && SAVE.guild.joined) {
+      const gk = weekKey();
+      if (SAVE.guild.weeklyKey !== gk) { SAVE.guild.weeklyClears = 0; SAVE.guild.weeklyKey = gk; }
+      SAVE.guild.weeklyClears++; SAVE.guild.contribution = (SAVE.guild.contribution || 0) + 1;
+    }
   }
   SAVE.gems += G.gems; persist();
   if (G.phase === 'win') { rankSubmit(); checkReview(); }
@@ -2309,8 +2460,8 @@ function startWave() {
 /* 무리 하나를 입구에 세운다. 전열이 앞, 지원이 맨 뒤인 대형으로 함께 걷는다. */
 function spawnParty(pp) {
   const sc = waveMul();
-  /* 역방향 혼합: 35%확률로 일부 무리가 합류 지점 뒤쪽(후방)에서 진입 */
-  const doReverse = LAYOUT && LAYOUT.reverse && Math.random() < 0.35;
+  /* 역방향: forceAllReverse(레이아웃1)이면 100%, 아니면 35% 확률 */
+  const doReverse = LAYOUT && LAYOUT.reverse && (LAYOUT.forceAllReverse ? true : Math.random() < 0.35);
   const d0 = doReverse ? ROADS[pp.road].dMerge + 20 : Math.max(46, ROADS[pp.road].dFork - ENTRY);
   const P = { road:doReverse ? 3 : pp.road, d:d0, heroes:[], fight:false, live:0, sp:0, dAvg:d0 };
   const order = pp.members.slice().sort((a, b) => FORM[DEF[b.type].role] - FORM[DEF[a.type].role]);
@@ -2641,10 +2792,11 @@ function update(dt) {
           }
           if (big && !df.shot) hitstop(0.045); SFX.hit(h.type, big, df.shot);
         }
-      } else if (dist2(h.x, h.z, STONE.x, STONE.z) <= Math.max(df.rng * 0.5, 30)) {
+      } else if ((() => { const sx = G.stones ? (G.stones[h.road <= 2 ? h.road : 0] || G.stones[0]) : STONE; return dist2(h.x, h.z, sx.x, sx.z) <= Math.max(df.rng * 0.5, 30); })()) {
+        const _st = G.stones ? (G.stones[h.road <= 2 ? h.road : 0] || G.stones[0]) : STONE;
         h.fighting = true;
-        h.yaw = Math.atan2(STONE.x - h.x, STONE.z - h.z);
-        if (h.cd <= 0) { const dm = Math.max(h.dmg, 3) * (df.slayer || 1); h.cd = df.cd * h.cdm; h.atk = 1; G.stone -= dm; buzz(30); fxText(STONE.x, STONE.z, '-' + Math.round(dm), '#ff3b3b'); burst(STONE.x, 30, STONE.z, 5, '#c77dff', 50); SFX.stone(); hitstop(0.04); shake = Math.max(shake, 5); }
+        h.yaw = Math.atan2(_st.x - h.x, _st.z - h.z);
+        if (h.cd <= 0) { const dm = Math.max(h.dmg, 3) * (df.slayer || 1); h.cd = df.cd * h.cdm; h.atk = 1; if (G.stones) { _st.hp -= dm; } else { G.stone -= dm; } buzz(30); fxText(_st.x, _st.z, '-' + Math.round(dm), '#ff3b3b'); burst(_st.x, 30, _st.z, 5, '#c77dff', 50); SFX.stone(); hitstop(0.04); shake = Math.max(shake, 5); }
       } else if (near.length && h.def.role !== 'support') {
         /* 적이 보이면 무리가 멈추고, 각자 맞는 상대를 향해 달려든다 */
         h.fighting = true;
@@ -2871,7 +3023,8 @@ function update(dt) {
   }
   G.heroes = G.heroes.filter(h => h.hp > 0);
 
-  if (G.stone <= 0) { G.stone = 0; G.phase = 'lose'; shake = 18; punch(50); Analytics.log('stage_fail', { stage_id: G.stage, wave: G.wIdx + 1 }); finishBattle(); SFX.lose(); buzz(300, true); return; }
+  if (G.stones) { G.stones.forEach(s => { if (s.hp < 0) s.hp = 0; }); G.stone = G.stones.reduce((a, s) => a + s.hp, 0); }
+  if (G.stone <= 0 || (G.stones && G.stones.some(s => s.hp <= 0))) { G.stone = 0; if (G.stones) G.stones.forEach(s => s.hp = 0); G.phase = 'lose'; shake = 18; punch(50); Analytics.log('stage_fail', { stage_id: G.stage, wave: G.wIdx + 1 }); finishBattle(); SFX.lose(); buzz(300, true); return; }
   if (!G.pending.length && !G.heroes.length) {
     G.gems += WAVE_GEMS;
     if (!G.endless && G.wIdx >= waveCount() - 1) { G.phase = 'win'; Analytics.log('stage_clear', { stage_id: G.stage, duration_sec: Math.round((Date.now() - (G.battleT || 0)) / 1000) }); finishBattle(); SFX.win(); }
@@ -3027,7 +3180,7 @@ function continueRun() {
   ADS.rewarded('수호석 회복', ok => {
     if (!ok) return;
     G.usedContinue = true; G.done = false;
-    G.stone = Math.ceil(G.maxStone * 0.5);
+    if (G.stones) { G.stones.forEach(s => { s.hp = Math.ceil(s.maxHp * 0.5); }); G.stone = G.stones.reduce((a,s) => a+s.hp, 0); } else G.stone = Math.ceil(G.maxStone * 0.5);
     G.heroes.length = 0; G.pending.length = 0; G.parties = []; G.corpses.length = 0;
     G.phase = 'prep'; G.revive = [];
     for (const b of G.rooms) if (b) { b.hp = b.maxHp; b.x = b.hx; b.z = b.hz; b.spent = false; if (b.rush) { b.rush = false; b.road = b.homeRoad; } }
@@ -3158,7 +3311,7 @@ function thumb(key) {
 
 /* ================= 메뉴 공통 (상단 바 · 하단 탭 · 팝업) ================= */
 const NAV_Y = H - 54;
-const NAV = [['shop', '🛒', '상점'], ['lobby', '🃏', '덱'], ['stages', '⚔️', '전투'], ['codex', '📖', '도감'], ['pvp', '🏆', '경쟁전']];
+const NAV = [['shop', '🛒', '상점'], ['lobby', '🃏', '덱'], ['stages', '⚔️', '전투'], ['codex', '📖', '도감'], ['pvp', '🏆', '경쟁전'], ['guild', '🏰', '길드']];
 function pad2(n) { return (n < 10 ? '0' : '') + n; }
 /* 1시간 이상 남았으면 시:분, 아니면 분:초 */
 function fmtT(ms) {
@@ -3185,6 +3338,7 @@ function rewLabel(x, y, r, fs, align) {
   const parts = [];
   if (r.gems) parts.push([CUR.gem.ico + r.gems, CUR.gem.col]);
   if (r.soul) parts.push([CUR.soul.ico + r.soul, CUR.soul.col]);
+  if (r.tickets) parts.push(['🎟×' + r.tickets, '#ffd35a']);
   for (const c of r.cards || []) parts.push([DEF[c.key].ico + '×' + c.n, RAR_COL[DEF[c.key].rar]]);
   ctx.font = 'bold ' + fs + 'px sans-serif';
   const ws = parts.map(p => ctx.measureText(p[0]).width), tw = ws.reduce((a, b) => a + b, 0) + (parts.length - 1) * 6;
@@ -3218,7 +3372,7 @@ function drawTopBar() {
 function drawNav() {
   ctx.fillStyle = '#0c0812'; ctx.fillRect(0, NAV_Y, W, H - NAV_Y);
   ctx.fillStyle = '#3a2f4d'; ctx.fillRect(0, NAV_Y, W, 1);
-  const w = W / NAV.length, dots = { stages:rewardAny(), codex:dexAnyClaim() };
+  const w = W / NAV.length, dots = { stages:rewardAny(), codex:dexAnyClaim(), guild:guildTreasuryCan() };
   NAV.forEach(([sc, ico, nm], i) => {
     const x = i * w, on = scene === sc;
     BTN.push({ x, y:NAV_Y, w, h:H - NAV_Y, act:() => { if (sc === 'stages' && scene !== 'stages') SS.init = false; scene = sc; }, label:'탭:' + nm });
@@ -3241,7 +3395,7 @@ function drawToast() {
   ctx.globalAlpha = 1;
 }
 function drawMenu() {
-  ({ lobby:drawLobby, stages:drawStages, shop:drawShop, codex:drawCodex, pvp:drawPvp })[scene]();
+  ({ lobby:drawLobby, stages:drawStages, shop:drawShop, codex:drawCodex, pvp:drawPvp, guild:drawGuild, season:drawSeasonPass })[scene]();
   drawTopBar(); drawNav(); drawPullResult(); drawModal(); drawToast();
 }
 
@@ -3273,9 +3427,10 @@ function unitTile(k, x, y, w, h, inT) {
   if (inT) { ctx.fillStyle = '#ffd35a'; rbox(x + w - 15, y + 14, 12, 11, 4); ctx.fill(); txt('✓', x + w - 9, y + 19.5, 8, '#141018', 'center'); }
   if (isM && canPromote(k)) txt('▲', x + 8, y + 22, 9, '#4ee06a', 'center');   /* 승급 가능 */
 }
-function openDetail(k) {
+function openDetail(k, list) {
   if (!SAVE.own[k]) { toast('아직 얻지 못했어요 · 상점 「소환」에서 얻을 수 있어요'); return; }
-  M = { k:DEF[k].kind === 'minion' ? 'unit' : 'trap', key:k };
+  const mk = DEF[k].kind === 'minion' ? 'unit' : 'trap';
+  M = { k:mk, key:k, list: mk === 'unit' ? (list || null) : null };
 }
 function renameDeck(i) {
   const d = SAVE.decks[i]; let n = null;
@@ -3325,7 +3480,7 @@ function drawLobby() {
   for (let i = 0; i < MSLOT_MAX; i++) {
     const r = slotRect(i, true), k = SAVE.mteam[i];
     if (k && !(L.fly && L.fly.k === k && T - L.fly.t0 < 0.35)) {
-      BTN.push({ x:r.x, y:r.y, w:r.w, h:r.h, act:() => openDetail(k), label:'편성칸:' + k });
+      BTN.push({ x:r.x, y:r.y, w:r.w, h:r.h, act:() => openDetail(k, SAVE.mteam.filter(x => SAVE.own[x])), label:'편성칸:' + k });
       const d = DEF[k];
       ctx.fillStyle = '#2a2140'; rbox(r.x, r.y, r.w, r.h, 8); ctx.fill();
       ctx.strokeStyle = '#ffd35a'; ctx.lineWidth = 1.8; rbox(r.x, r.y, r.w, r.h, 8); ctx.stroke();
@@ -3368,7 +3523,7 @@ function drawLobby() {
     const x = cx0 + (i % 5) * (cw + cg), y = TOP + Math.floor(i / 5) * (chh + cg) - L.lobY;
     L.cardR[k] = { x, y, w:cw, h:chh };
     if (y + chh < TOP || y > BOT) return;
-    BTN.push({ x, y:Math.max(y, TOP), w:cw, h:Math.min(y + chh, BOT) - Math.max(y, TOP), act:() => openDetail(k), label:'카드:' + k });
+    BTN.push({ x, y:Math.max(y, TOP), w:cw, h:Math.min(y + chh, BOT) - Math.max(y, TOP), act:() => openDetail(k, isM ? list.filter(x => DEF[x].kind === 'minion') : null), label:'카드:' + k });
     unitTile(k, x, y, cw, chh, team.indexOf(k) >= 0);
     /* 이 카드가 들어간 덱 번호 (지금 덱은 금색) */
     decksOf(k).forEach((di, j) => {
@@ -3397,7 +3552,7 @@ function tierAt(lv) { return lv < MILESTONE.act ? 0 : lv >= MILESTONE.up2 ? 3 : 
 /* 위쪽 공통: 큰 그림 + 이름·등급·설명 */
 function detailHead(k, sub) {
   const d = DEF[k];
-  panel(12, 52, W - 24, 590, d.name);
+  panel(12, 52, W - 24, 640, d.name);
   const bn = d.kind === 'trap' ? unitImg(k + '_banner') : null;
   if (bn) {
     /* 전설 함정: 배너 전체를 위쪽에, 글은 그 아래 두 줄로 */
@@ -3462,8 +3617,22 @@ function mUnit(m) {
           ok:() => { SAVE.gems += refund; SAVE.lv[k] = 1; if (G) G.skc = {}; persist(); toast(d.name + ' 레벨 초기화 · ' + CUR.gem.ico + refund + ' 환급'); } };
   }, { dis:lv <= 1, bg:'#3a2430', fs:12, sub:lv > 1 ? CUR.gem.ico + refund + ' 환급' : '', sc:'#ff9aa4' });
   btn(184, y + 56, 152, 40, inT ? '편성 해제' : '편성하기', () => toggleWithFly(k), { bg:inT ? '#2a2140' : '#4a3a63', on:!inT, fs:13 });
-  txt('승급 카드는 소환·별 보상(권속 조각)·일일 상자로 모여요', W / 2, 532, 9, '#8a7aa5', 'center');
-  txt('레벨 ' + MS_LV.join('·') + '는 스킬, 그 밖의 레벨은 공격·체력 +' + Math.round(LVUP.per * 100) + '%', W / 2, 548, 9, '#8a7aa5', 'center');
+  /* 강화 버튼 */
+  const me = menhLv(k), canME = canEnhMinion(k), mec = menhCost(me);
+  const menhLabel = '★'.repeat(me) + '☆'.repeat(MENH.max - me);
+  btn(24, y + 104, W - 48, 40, me >= MENH.max ? '강화 ' + menhLabel + ' (최고)' : '권속 강화 ' + menhLabel + ' → ★' + (me+1), () => enhMinion(k), {
+    dis:!canME || SAVE.gems < mec, bg:'#2a3a4a', bc:canME ? '#8be9ff' : '#3a2f4d', fs:12,
+    sub:me >= MENH.max ? '최대 강화 · 공격력 +' + Math.round(MENH.per*me*100)+'%' : '카드 ' + cardsOf(k) + '/' + MENH.need + '장 · ' + CUR.gem.ico + mec + ' · 공격+' + Math.round(MENH.per*(me+1)*100)+'%',
+    sc:canME ? '#8be9ff' : '#8a7aa5' });
+  txt('승급 카드는 소환·별 보상(권속 조각)·일일 상자로 모여요', W / 2, 580, 9, '#8a7aa5', 'center');
+  txt('레벨 ' + MS_LV.join('·') + '는 스킬, 그 밖의 레벨은 공격·체력 +' + Math.round(LVUP.per * 100) + '%', W / 2, 596, 9, '#8a7aa5', 'center');
+  /* 덱 슬라이드 뷰어 내비게이션 */
+  if (m.list && m.list.length > 1) {
+    const ci = m.list.indexOf(m.key), ln = m.list.length;
+    btn(24, 611, 44, 26, '◀', () => { M = { k:'unit', key:m.list[ci - 1], list:m.list }; }, { dis:ci <= 0, bg:'rgba(50,40,80,.9)', fs:15 });
+    txt((ci + 1) + ' / ' + ln, W / 2, 625, 11, '#8a7aa5', 'center');
+    btn(W - 68, 611, 44, 26, '▶', () => { M = { k:'unit', key:m.list[ci + 1], list:m.list }; }, { dis:ci >= ln - 1, bg:'rgba(50,40,80,.9)', fs:15 });
+  }
 }
 function mTrap(m) {
   const k = m.key, d = DEF[k], e = enhLv(k), sm = statMul(k), inT = SAVE.tteam.indexOf(k) >= 0;
@@ -4299,8 +4468,8 @@ function stageCard(c, x, live) {
   /* 머리줄 */
   if (end) {
     txt('∞  무한의 문', L, y0 + 20, 16, '#e4d4ff');
-    txt('끝없이 밀려오는 침입자를 몇 웨이브까지 막는지 겨뤄요', L, y0 + 42, 9, '#9a8ab5');
-    txt(SAVE.endlessBest ? '최고 ' + SAVE.endlessBest + '웨이브' : '기록 없음', R, y0 + 20, 11, '#ffd35a', 'right');
+    txt('몇 층까지 막을 수 있나요? 10층마다 보스 등장!', L, y0 + 42, 9, '#9a8ab5');
+    txt(SAVE.endlessBest ? '최고 ' + SAVE.endlessBest + '층' : '기록 없음', R, y0 + 20, 11, '#ffd35a', 'right');
   } else {
     txt('제' + S.no + '관문', L, y0 + 20, 16, '#fff');
     txt(S.name, L, y0 + 42, 13, '#ffe9a8');
@@ -4383,7 +4552,8 @@ function stageCard(c, x, live) {
 function drawStages() {
   BTN = [];
   menuBg();
-  if (!SS.init) { SS.i = SS.pos = Math.min(STAGES.length - 1, SAVE.cleared); SS.dx = 0; SS.init = true; }
+  btn(W - 96, 32, 84, 22, '🎫 시즌 ' + seasonDaysLeft() + '일', () => { scene = 'season'; }, { bg: SAVE.seasonPass.premium ? '#1a2a1a' : '#241830', bc: SAVE.seasonPass.premium ? '#6bdc7a' : '#6a4ac8', fs:10, fc: SAVE.seasonPass.premium ? '#9ae8b5' : '#c9a8ff' });
+  if (!SS.init) { SS.i = SS.pos = Math.min(STAGES.length - 1, SAVE.lastStage !== undefined ? SAVE.lastStage : SAVE.cleared); SS.dx = 0; SS.init = true; }
   const dt = Math.min(0.05, Math.max(0, T - SS.t)); SS.t = T;
   if (!SS.dx) SS.pos += (SS.i - SS.pos) * Math.min(1, dt * 12);
   const pos = SS.pos - SS.dx / CARD_GAP, cur = cardIdx(SS.i);
@@ -4543,9 +4713,18 @@ function drawScene() {
     pushBox(r.x, 3, r.z, 30, 7, 30, col);
   }
 
-  pushBox(STONE.x, 2, STONE.z, 76, 12, 76, '#2a2242');
-  const si = cam.pitch > 1.25 ? null : unitImg('__stone');
-  if (!si) drawModel(CRYSTAL(), STONE.x, 8, STONE.z, 46, 0);
+  let si = null;
+  if (G.stones) {
+    const _sImg = cam.pitch > 1.25 ? null : unitImg('__stone');
+    G.stones.forEach(s => {
+      pushBox(s.x, 2, s.z, 56, 10, 56, s.hp > 0 ? '#2a2242' : '#1a1020');
+      if (!_sImg) drawModel(CRYSTAL(), s.x, 8, s.z, s.hp > 0 ? 36 : 26, 0);
+    });
+  } else {
+    pushBox(STONE.x, 2, STONE.z, 76, 12, 76, '#2a2242');
+    si = cam.pitch > 1.25 ? null : unitImg('__stone');
+    if (!si) drawModel(CRYSTAL(), STONE.x, 8, STONE.z, 46, 0);
+  }
   const bbQ = [], simple = cam.pitch > 1.25, icoQ = [], plQ = [];
   for (let i = 0; i < G.rooms.length; i++) {
     const b = G.rooms[i]; if (!b) continue;
@@ -4597,7 +4776,8 @@ function drawScene() {
     pushBox(m.x, m.y + 36, m.z, 14, 20, 14, '#ffd35a');
   }
   endScene();
-  if (si) pushBillboard(si, STONE.x, 10 + Math.sin(T * 1.6) * 2, STONE.z, 56, { sy:1 + Math.sin(T * 1.6) * 0.02 }, 2);
+  if (G.stones) { const _sImg2 = unitImg('__stone'); if (_sImg2) G.stones.forEach(s => { if (s.hp > 0) pushBillboard(_sImg2, s.x, 10 + Math.sin(T * 1.6) * 2, s.z, 44, { sy:1 + Math.sin(T * 1.6) * 0.02 }, 2); }); }
+  else if (si) pushBillboard(si, STONE.x, 10 + Math.sin(T * 1.6) * 2, STONE.z, 56, { sy:1 + Math.sin(T * 1.6) * 0.02 }, 2);
   for (const q of bbQ) pushBillboard(q[0], q[1], q[2], q[3], q[4], q[5], q[6]);
   drawBillboards();
   /* 위에서 내려다보는 배치 시점에서는 일러스트 대신 알아보기 쉬운 아이콘 */
@@ -4742,8 +4922,12 @@ function drawScene() {
     if (h.A) txt(h.A.name, s[0], s[1] - (gd ? 24 : 13), 9, h.A.col, 'center');
     if (h.charmT > 0) txt('💗', s[0] + w / 2 + 6, s[1] - 2, 10, '#ff7ac8', 'center');
   }
-  const st = proj(STONE.x, 72, STONE.z);
-  if (st) bar2(st[0] - 40, st[1] - 10, 80, 7, G.stone / G.maxStone, '#8b5cf6');
+  if (G.stones) {
+    G.stones.forEach(s => { const st = proj(s.x, 72, s.z); if (st) { bar2(st[0] - 28, st[1] - 10, 56, 6, s.hp / s.maxHp, s.hp > 0 ? '#8b5cf6' : '#444'); if (s.hp <= 0) { ctx.save(); ctx.globalAlpha = 0.7; txt('💀', st[0], st[1] - 18, 14, '#ff3b3b', 'center'); ctx.restore(); } } });
+  } else {
+    const st = proj(STONE.x, 72, STONE.z);
+    if (st) bar2(st[0] - 40, st[1] - 10, 80, 7, G.stone / G.maxStone, '#8b5cf6');
+  }
   for (const f of G.fx) if (f.k === 'txt') {
     const a = f.life / f.max, s = proj(f.x, f.y + (1 - a) * 28, f.z);
     if (!s) continue;
@@ -4796,10 +4980,16 @@ function drawGame() {
   ctx.fillStyle = 'rgba(8,6,14,.88)'; ctx.fillRect(0, 0, W, 38);
   const S = curStage();
   txt(G.endless ? '∞ 무한의 문' : '제' + S.no + '관문 · ' + S.name, 10, 12, 12, '#fff');
-  txt((G.endless ? '웨이브 ' + (G.wIdx + 1) + (SAVE.endlessBest ? '  (최고 ' + SAVE.endlessBest + ')' : '')
+  txt((G.endless ? ((G.wIdx + 1) % 10 === 0 && G.phase === 'run' ? '👑 ' : '') + (G.wIdx + 1) + '층' + (SAVE.endlessBest ? '  (최고 ' + SAVE.endlessBest + '층)' : '')
                 : '웨이브 ' + (G.wIdx + 1) + '/' + waveCount()) + '   ◆ +' + G.gems, 10, 28, 11, '#8be9ff');
-  txt('수호석', 180, 12, 10, '#c9b8ff'); bar2(216, 8, 100, 9, G.stone / G.maxStone, '#8b5cf6');
-  txt(Math.ceil(G.stone) + ' / ' + G.maxStone, 316, 28, 10, '#c9b8ff', 'right');
+  if (G.stones) {
+    txt('수호석×3', 150, 12, 10, '#c9b8ff');
+    G.stones.forEach((s, r) => { bar2(196 + r * 46, 8, 40, 9, s.hp / s.maxHp, s.hp > 0 ? '#8b5cf6' : '#333'); });
+    txt(G.stones.filter(s => s.hp > 0).length + '/3', 320, 12, 10, '#c9b8ff', 'right');
+  } else {
+    txt('수호석', 180, 12, 10, '#c9b8ff'); bar2(216, 8, 100, 9, G.stone / G.maxStone, '#8b5cf6');
+    txt(Math.ceil(G.stone) + ' / ' + G.maxStone, 316, 28, 10, '#c9b8ff', 'right');
+  }
   if (G.phase === 'run' || G.phase === 'prep') btn(W - 36, 4, 30, 30, '⏸', pauseGame, { bg:'rgba(40,32,60,.9)', fs:14 });
   { const bh = G.heroes.find(h => h.boss); if (bh) { ctx.fillStyle = '#2a1608'; ctx.fillRect(0, 38, W, 4); ctx.fillStyle = '#ff9a4a'; ctx.fillRect(0, 38, W * Math.max(0, bh.hp / bh.maxHp), 4); } }
   if (G.frenzy > 0) txt('광기 ' + G.frenzy.toFixed(1) + 's', 150, 28, 10, '#ff6b6b');
@@ -4902,24 +5092,56 @@ function drawGame() {
     const win = G.phase === 'win';
     if (G.endless) {
       txt('무한의 문', W / 2, 240, 22, '#c77dff', 'center');
-      txt(G.reached + ' 웨이브 돌파', W / 2, 284, 26, '#ffd35a', 'center');
-      if (G.first) txt('최고 기록 경신!', W / 2, 318, 14, '#6bdc7a', 'center');
-      else txt('최고 기록 ' + SAVE.endlessBest + ' 웨이브', W / 2, 318, 13, '#9a8ab5', 'center');
-      txt('획득 ◆ ' + G.gems, W / 2, 352, 19, '#8be9ff', 'center');
-    } else {
-      if (win && G.stars) txt('★'.repeat(G.stars) + '☆'.repeat(3 - G.stars), W / 2, 214, 28, '#ffd35a', 'center');
-      txt(win ? '관문 돌파!' : '수호석이 부서졌다', W / 2, 250, 24, win ? '#ffd35a' : '#ff6b6b', 'center');
-      txt('제' + S.no + '관문 · ' + S.name, W / 2, 286, 14, '#c9b8ff', 'center');
-      if (win && G.first) {
-        if (G.stage === 14) {
-          txt('🌀 무한의 문이 열렸어요!', W / 2, 314, 14, '#c77dff', 'center');
-          txt('∞ 탭에서 무한 모드에 도전해보세요', W / 2, 332, 11, '#9a8ab5', 'center');
-        } else {
-          txt('다음 관문이 열렸어요', W / 2, 314, 13, '#6bdc7a', 'center');
+      txt(G.reached + '층 돌파!', W / 2, 284, 26, '#ffd35a', 'center');
+      if (G.first) txt('🏆 최고 기록 경신!', W / 2, 318, 14, '#6bdc7a', 'center');
+      else txt('최고 기록 ' + SAVE.endlessBest + '층', W / 2, 318, 13, '#9a8ab5', 'center');
+      if (G.bossBonus) txt('보스 층 보너스 ◆+' + G.bossBonus, W / 2, 338, 11, '#ffd35a', 'center');
+      txt('획득 ◆ ' + G.gems, W / 2, (G.bossBonus ? 358 : 352), 19, '#8be9ff', 'center');
+    } else if (win && !G.endless) {
+        const A = G.clearAnim;
+        if (A) { A.t += 1/60; for (const p of A.particles) { p.x += p.vx; p.y += p.vy; p.vy += 0.05; p.life -= 1/60/p.maxLife; } }
+        /* 황금 플래시 (3성 클리어) */
+        if (A && G.stars === 3 && A.t < 0.6) { ctx.save(); ctx.globalAlpha = Math.max(0, 0.6-A.t)*0.7; ctx.fillStyle='#ffd35a'; ctx.fillRect(0,0,W,H); ctx.restore(); }
+        /* 파티클 */
+        if (A) for (const p of A.particles) { if (p.life<=0) continue; ctx.save(); ctx.globalAlpha=Math.max(0,p.life)*0.85; ctx.fillStyle=p.col; ctx.beginPath(); ctx.arc(p.x,p.y,p.size*Math.max(0,p.life),0,7); ctx.fill(); ctx.restore(); }
+        /* PERFECT! / CLEAR! 팡파레 */
+        const clrLabel = G.stars===3 ? 'PERFECT!' : 'CLEAR!';
+        const clrAlpha = A ? Math.min(1, A.t/0.4) : 1;
+        const clrScale = A ? 1 + Math.max(0, 0.5 - A.t)*0.8 : 1;
+        const clrCol = G.stars===3 ? '#ffd35a' : '#6bdc7a';
+        ctx.save(); ctx.globalAlpha=clrAlpha; ctx.translate(W/2,170); ctx.scale(clrScale,clrScale); ctx.translate(-W/2,-170);
+        txt(clrLabel, W/2, 170, 30, clrCol, 'center'); ctx.restore();
+        /* 별 순차 애니메이션 */
+        const sDelay=0.3, sInt=0.22;
+        for (let i=0; i<3; i++) {
+          const rev = A ? A.t - sDelay - i*sInt : 1;
+          const sx = W/2 - 28 + i*28, sy=214;
+          if (i >= G.stars) { txt('☆', sx, sy, 28, '#3a2f4d', 'center'); }
+          else if (rev>=0) {
+            const fl=Math.max(0,1-rev/0.4), sc=1+fl*0.9;
+            ctx.save(); ctx.translate(sx, sy-12); ctx.scale(sc,sc);
+            if (fl>0.1) { ctx.shadowColor='#ffd35a'; ctx.shadowBlur=22*fl; }
+            txt('★', 0, 0, 28, fl>0.5?'#fff':'#ffd35a', 'center');
+            ctx.shadowBlur=0; ctx.restore();
+          }
         }
-      }
-      if (win && G.first && G.soulBonus) txt('영혼석 첫 클리어 보상 ◈+' + G.soulBonus, W / 2, win && G.first && G.stage === 14 ? 350 : 334, 11, '#c77dff', 'center');
-      txt('획득 ◆ ' + G.gems, W / 2, win && G.first && G.soulBonus ? 368 : 348, 19, '#8be9ff', 'center');
+        txt('관문 돌파!', W / 2, 250, 24, '#ffd35a', 'center');
+        txt('제' + S.no + '관문 · ' + S.name, W / 2, 286, 14, '#c9b8ff', 'center');
+        if (G.first) {
+          if (G.stage === 14) {
+            txt('🌀 무한의 문이 열렸어요!', W / 2, 314, 14, '#c77dff', 'center');
+            txt('∞ 탭에서 무한 모드에 도전해보세요', W / 2, 332, 11, '#9a8ab5', 'center');
+          } else {
+            txt('다음 관문이 열렸어요', W / 2, 314, 13, '#6bdc7a', 'center');
+          }
+        }
+        if (G.first && G.soulBonus) txt('영혼석 첫 클리어 보상 ◈+' + G.soulBonus, W / 2, G.first && G.stage === 14 ? 350 : 334, 11, '#c77dff', 'center');
+        if (G.first && G.firstBonus) txt('첫 관문 신규 보너스 ◆+' + G.firstBonus, W / 2, G.first && G.soulBonus ? 350 : 334, 11, '#8be9ff', 'center');
+        txt('획득 ◆ ' + G.gems, W / 2, (G.first && G.soulBonus) || (G.first && G.firstBonus) ? 368 : 348, 19, '#8be9ff', 'center');
+    } else if (!win) {
+        txt('수호석이 부서졌다', W / 2, 250, 24, '#ff6b6b', 'center');
+        txt('제' + S.no + '관문 · ' + S.name, W / 2, 286, 14, '#c9b8ff', 'center');
+        txt('획득 ◆ ' + G.gems, W / 2, 348, 19, '#8be9ff', 'center');
     }
     const canDouble = !G.doubled && G.gems > 0;
     const canCont = !G.usedContinue && G.phase === 'lose';
@@ -4936,6 +5158,11 @@ function drawGame() {
     btn(100, by, W - 200, 40, '나가기', () => {
       goStages(); L.msg = '수정으로 권속과 함정을 더 모아보세요';
     }, { fs:13 });
+    if (!G.endless) {
+      by += 46;
+      btn(36, by, (W - 84) / 2, 38, '↩ 다시 도전', () => startBattle(G.stage), { bg:'#2a2140', fs:12 });
+      if (win && G.stage + 1 < STAGES.length) btn(W / 2 + 6, by, (W - 84) / 2, 38, '다음 관문 →', () => startBattle(G.stage + 1), { bg:'#1f3a4a', fs:12 });
+    }
   }
 }
 /* ================= 일시정지 =================
@@ -5007,6 +5234,7 @@ function draw() {
   if (scene === 'game' && G.paused) drawPause();
   if (scene === 'game' && M) drawModal();
   drawPromoAnim();   /* 승급 이펙트 — 씬에 상관없이 최상단에 그린다 */
+  drawMenhAnim();    /* 권속 강화 이펙트 */
   drawPullAnim();    /* 소환 애니메이션 */
   tipCheck(); drawTut();
   advDraw();
@@ -5261,6 +5489,10 @@ function tap(x, y) {
     for (const b of BTN) if (b.label === '_promoClose' && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
     return;
   }
+  if (G && G.menhAnim && !G.menhAnim.done) {
+    for (const b of BTN) if (b.label === '_menhClose' && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
+    return;
+  }
   if (scene !== 'game') {
     /* 소환 애니메이션 중: 버튼 처리 또는 스킵 */
     if (L.pullAnim && !L.pullAnim.done) {
@@ -5318,6 +5550,8 @@ cv.addEventListener('pointermove', e => {
   if (scene === 'codex' && !M && maxMove > TAP_SLOP) L.dexY = (L.dexY || 0) + prev[1] - p[1];
   if (scene === 'pvp' && !M && maxMove > TAP_SLOP) L.lbY = (L.lbY || 0) + prev[1] - p[1];
   if (scene === 'lobby' && !M && maxMove > TAP_SLOP && startPt && startPt[1] > 370) L.lobY = (L.lobY || 0) + prev[1] - p[1];
+  if (scene === 'season' && !M && maxMove > TAP_SLOP) L.spY = (L.spY || 0) + prev[1] - p[1];
+  if (scene === 'guild' && !M && maxMove > TAP_SLOP) L.guildY = (L.guildY || 0) + prev[1] - p[1];
   if (orbiting && maxMove > TAP_SLOP) {
     cam.yaw -= (p[0] - prev[0]) * 0.009;
     cam.pitch = Math.max(0.22, Math.min(1.552, cam.pitch + (p[1] - prev[1]) * 0.006));
@@ -5329,6 +5563,15 @@ function endPointer(e) {
   const p = PT.get(e.pointerId); PT.delete(e.pointerId);
   const wasPrimary = e.pointerId === primaryId;
   if (PT.size === 0) {
+    /* 단위 팝업 스와이프 슬라이드 */
+    if (wasPrimary && startPt && !multi && M && M.k === 'unit' && M.list && maxMove > 44) {
+      const sdx = p[0] - startPt[0], sdy = p[1] - startPt[1];
+      if (Math.abs(sdx) > Math.abs(sdy) * 1.4 && Math.abs(sdx) > 40) {
+        const ci = M.list.indexOf(M.key);
+        if (sdx < 0 && ci < M.list.length - 1) M = { k:'unit', key:M.list[ci + 1], list:M.list };
+        else if (sdx > 0 && ci > 0) M = { k:'unit', key:M.list[ci - 1], list:M.list };
+      }
+    }
     if (wasPrimary && startPt && !multi && maxMove <= TAP_SLOP) tap(p[0], p[1]);
     if (scene === 'stages' && SS.dx) cardRelease();
     orbiting = false; startPt = null; primaryId = null; multi = false;
@@ -5773,6 +6016,238 @@ function drawStage() {
   /* 테두리 */
   ctx.fillStyle = col[1]; ctx.fillRect(0, y0 + hh - 2, W, 2);
   ctx.restore();
+}
+
+/* ================= 시즌 패스 ================= */
+function drawSeasonPass() {
+  BTN = [];
+  menuBg();
+  menuTitle('시즌 패스 · 시즌 1');
+  const sp = SAVE.seasonPass;
+  if (!sp.startT) { sp.startT = Date.now(); persist(); }
+  const daysLeft = seasonDaysLeft();
+  const lv = sp.level || 0;
+  const atMax = lv >= SEASON_PASS.levels.length;
+  ctx.fillStyle = '#1a1228'; rbox(12, 56, W - 24, 54, 8); ctx.fill();
+  ctx.strokeStyle = '#6a4ac8'; ctx.lineWidth = 1.2; rbox(12, 56, W - 24, 54, 8); ctx.stroke();
+  txt('시즌 1', 26, 70, 10, '#c9a8ff');
+  txt(daysLeft + '일 남음', 26, 90, 13, daysLeft <= 7 ? '#ff9a4a' : '#ffd35a');
+  txt('Lv.' + lv + ' / 30', W / 2, 70, 11, '#8be9ff', 'center');
+  if (!atMax) {
+    ctx.fillStyle = '#2a2040'; ctx.fillRect(W / 2 - 50, 80, 100, 8);
+    ctx.fillStyle = '#8be9ff'; ctx.fillRect(W / 2 - 50, 80, 100 * Math.min(1, sp.xp || 0), 8);
+    txt('일/주간 퀘스트 완료 시 XP +1', W / 2, 99, 8, '#6a9ec8', 'center');
+  } else { txt('MAX', W / 2, 86, 15, '#ffd35a', 'center'); }
+  if (sp.premium) {
+    ctx.fillStyle = '#1a2a1a'; rbox(W - 132, 58, 118, 50, 8); ctx.fill();
+    ctx.strokeStyle = '#6bdc7a'; ctx.lineWidth = 1.5; rbox(W - 132, 58, 118, 50, 8); ctx.stroke();
+    txt('👑 프리미엄', W - 73, 74, 10, '#6bdc7a', 'center');
+    txt('활성화됨', W - 73, 91, 12, '#9ae8b5', 'center');
+  } else {
+    btn(W - 132, 58, 118, 50, '👑 프리미엄 구매', function() { toast('준비 중이에요 (결제 연동 예정)'); }, { bg:'#2a1a0a', bc:'#ffd35a', fs:11, fc:'#ffd35a', sub:'2배 보상 + 전용 스킨', sc:'#c9a870' });
+  }
+  txt('레벨', 26, 124, 9, '#6b5a85', 'center');
+  txt('무료', 113, 124, 9, '#9a8ab5', 'center');
+  txt('👑 프리미엄', 256, 124, 9, sp.premium ? '#9a8ae5' : '#4a3a2a', 'center');
+  const TOP = 130, rh = 50, BOT = NAV_Y - 4;
+  const maxScroll = Math.max(0, SEASON_PASS.levels.length * rh - (BOT - TOP));
+  L.spY = Math.max(0, Math.min(maxScroll, L.spY || 0));
+  ctx.save(); ctx.beginPath(); ctx.rect(0, TOP, W, BOT - TOP); ctx.clip();
+  SEASON_PASS.levels.forEach(function(row) {
+    const y = TOP + (row.lv - 1) * rh - L.spY;
+    if (y > BOT || y + rh < TOP) return;
+    const cf = !!(sp.claimed && sp.claimed['f' + row.lv]);
+    const cp = !!(sp.claimed && sp.claimed['p' + row.lv]);
+    const unlocked = lv >= row.lv;
+    const isMile = row.lv % 10 === 0 || row.lv === 30;
+    ctx.fillStyle = isMile ? '#221838' : '#180e28';
+    rbox(6, y + 3, W - 12, rh - 6, 7); ctx.fill();
+    if (isMile) { ctx.strokeStyle = '#4a3a78'; ctx.lineWidth = 1; rbox(6, y + 3, W - 12, rh - 6, 7); ctx.stroke(); }
+    ctx.fillStyle = unlocked ? '#5a3a98' : '#2e2640';
+    rbox(10, y + 11, 28, 28, 6); ctx.fill();
+    txt(String(row.lv), 24, y + 28, 11, unlocked ? '#fff' : '#5a4a73', 'center');
+    ctx.fillStyle = cf ? '#12281a' : (unlocked ? '#1c1430' : '#110d1e');
+    rbox(44, y + 8, 130, 34, 6); ctx.fill();
+    if (cf) { ctx.strokeStyle = '#3a7a4a'; ctx.lineWidth = 1; rbox(44, y + 8, 130, 34, 6); ctx.stroke(); }
+    rewLabel(44 + 65, y + 31, row.free, 11, 'center');
+    if (cf) txt('✓', 44 + 65, y + 14, 9, '#6bdc7a', 'center');
+    else if (unlocked) btn(44, y + 8, 130, 34, '', function() { claimSeasonReward(row.lv, false); }, { bg:'rgba(0,0,0,0)', bc:'rgba(139,233,255,0.5)' });
+    ctx.fillStyle = cp ? '#122018' : (sp.premium ? (unlocked ? '#1a1438' : '#10101e') : '#0e0c18');
+    rbox(180, y + 8, 168, 34, 6); ctx.fill();
+    if (!sp.premium) { ctx.strokeStyle = '#2a1e0e'; ctx.lineWidth = 1; rbox(180, y + 8, 168, 34, 6); ctx.stroke(); txt('👑', 180 + 84, y + 26, 14, '#3a2a1a', 'center'); }
+    else if (cp) { ctx.strokeStyle = '#3a7a4a'; ctx.lineWidth = 1; rbox(180, y + 8, 168, 34, 6); ctx.stroke(); rewLabel(180 + 84, y + 31, row.premium, 11, 'center'); txt('✓', 180 + 84, y + 14, 9, '#6bdc7a', 'center'); }
+    else {
+      ctx.strokeStyle = '#5a4ab8'; ctx.lineWidth = 1; rbox(180, y + 8, 168, 34, 6); ctx.stroke();
+      if (row.skin) txt('✨스킨포함', 180 + 160, y + 12, 7, '#ffd35a', 'right');
+      rewLabel(180 + 84, y + 31, row.premium, 11, 'center');
+      if (unlocked) btn(180, y + 8, 168, 34, '', function() { claimSeasonReward(row.lv, true); }, { bg:'rgba(0,0,0,0)', bc:'rgba(138,106,216,0.5)' });
+    }
+  });
+  ctx.restore();
+  drawTopBar(); drawNav();
+}
+
+/* ================= 길드 시스템 ================= */
+const GUILD_DUMMY_LIST = [
+  { id:'g1', name:'어둠의심연',   lv:8, members:14, weekScore:48 },
+  { id:'g2', name:'붉은달기사단', lv:6, members:10, weekScore:31 },
+  { id:'g3', name:'혼돈의지배자', lv:5, members:8,  weekScore:22 },
+  { id:'g4', name:'철갑마왕단',   lv:4, members:6,  weekScore:15 },
+];
+const GUILD_DUMMY_MEMBERS = [
+  { name:'어둠의군주', contribution:128, lastSeen:'방금',    role:'master' },
+  { name:'그림자칼',   contribution:89,  lastSeen:'1시간 전', role:'officer' },
+  { name:'붉은달',     contribution:72,  lastSeen:'3시간 전', role:'member' },
+  { name:'해골왕',     contribution:55,  lastSeen:'어제',    role:'member' },
+  { name:'검은날개',   contribution:44,  lastSeen:'2일 전',  role:'member' },
+  { name:'심연의눈',   contribution:38,  lastSeen:'3일 전',  role:'member' },
+  { name:'나 (마왕)',  contribution:0,   lastSeen:'방금',    role:'member', isMe:true },
+];
+function drawGuild() {
+  BTN = [];
+  menuBg();
+  menuTitle('길드');
+  const g = SAVE.guild;
+  if (M && M.k === 'guildCreate') {
+    ctx.fillStyle = 'rgba(0,0,0,.82)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#1a1228'; rbox(24, 220, W - 48, 220, 12); ctx.fill();
+    ctx.strokeStyle = '#6a4ac8'; ctx.lineWidth = 1.5; rbox(24, 220, W - 48, 220, 12); ctx.stroke();
+    txt('길드 만들기', W / 2, 252, 15, '#fff', 'center');
+    txt('(이름 자동 생성)', W / 2, 276, 10, '#8a7aa5', 'center');
+    txt('Firebase 연동 후 실제 멀티 가능', W / 2, 296, 9, '#5a4a73', 'center');
+    txt('현재는 로컬 시뮬레이션입니다', W / 2, 312, 9, '#5a4a73', 'center');
+    const gNames = ['마왕의 심연','어둠의 성채','혼돈의 왕국','공포의 던전','저주받은 성'];
+    btn(W / 2 - 90, 336, 180, 44, '🏰 길드 창설', function() {
+      const nm = gNames[Math.floor(Math.random() * gNames.length)];
+      g.joined = true; g.id = 'local_' + Date.now(); g.name = nm; g.role = 'master';
+      persist(); M = null; L.guildTab = 'member'; toast('"' + nm + '" 길드 창설!');
+    }, { bg:'#3a1a6a', bc:'#8a6ad8', fs:13 });
+    btn(W / 2 - 50, 390, 100, 32, '취소', function() { M = null; }, { bg:'#241d2e', fs:12 });
+    drawTopBar(); drawNav(); return;
+  }
+  if (M && M.k === 'guildLeave') {
+    ctx.fillStyle = 'rgba(0,0,0,.82)'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#1a1228'; rbox(24, 250, W - 48, 180, 12); ctx.fill();
+    ctx.strokeStyle = '#8a3a3a'; ctx.lineWidth = 1.5; rbox(24, 250, W - 48, 180, 12); ctx.stroke();
+    txt('길드를 탈퇴할까요?', W / 2, 282, 14, '#fff', 'center');
+    txt('기여도와 진행도가 초기화됩니다', W / 2, 306, 10, '#ff9a8a', 'center');
+    btn(W / 2 - 96, 330, 88, 38, '탈퇴', function() {
+      g.joined = false; g.id = ''; g.name = ''; g.role = 'member'; g.contribution = 0; M = null;
+      persist(); toast('길드를 탈퇴했어요');
+    }, { bg:'#3a1818', bc:'#c84a4a', fs:13 });
+    btn(W / 2 + 8, 330, 88, 38, '취소', function() { M = null; }, { bg:'#241d2e', fs:12 });
+    drawTopBar(); drawNav(); return;
+  }
+  if (!g.joined) {
+    txt('길드에 가입하거나 새로 만들어 보세요', W / 2, 68, 11, '#9a8ab5', 'center');
+    txt('(현재 로컬 시뮬레이션 · Firebase 연동 예정)', W / 2, 84, 9, '#5a4a73', 'center');
+    btn(12, 96, (W - 28) / 2, 38, '+ 길드 만들기', function() { M = { k:'guildCreate' }; }, { bg:'#2a1a4a', bc:'#6a4ac8', fs:13 });
+    btn(16 + (W - 28) / 2, 96, (W - 28) / 2, 38, '길드 찾기 / 가입', function() { M = { k:'guildSearch' }; }, { bg:'#1a2a4a', bc:'#4a6ac8', fs:12 });
+    txt('추천 길드', 16, 148, 12, '#c9b8ff');
+    GUILD_DUMMY_LIST.forEach(function(guild, i) {
+      const y = 160 + i * 64;
+      ctx.fillStyle = '#1a1228'; rbox(12, y, W - 24, 56, 8); ctx.fill();
+      ctx.strokeStyle = '#2e2640'; ctx.lineWidth = 1; rbox(12, y, W - 24, 56, 8); ctx.stroke();
+      txt('🏰 ' + guild.name, 28, y + 18, 13, '#fff');
+      txt('Lv.' + guild.lv, 28, y + 38, 10, '#c9a8ff');
+      txt('멤버 ' + guild.members + '명', 90, y + 38, 10, '#8be9ff');
+      txt('이번 주 ' + guild.weekScore + '회', 170, y + 38, 10, '#9ae8b5');
+      btn(W - 82, y + 12, 68, 32, '가입하기', function() {
+        g.joined = true; g.id = guild.id; g.name = guild.name; g.role = 'member';
+        GUILD_DUMMY_MEMBERS[GUILD_DUMMY_MEMBERS.length - 1].contribution = g.contribution || 0;
+        persist(); L.guildTab = 'member'; toast(guild.name + '에 가입했어요!');
+      }, { bg:'#2a3a5a', bc:'#4a6ac8', fs:11 });
+    });
+    if (M && M.k === 'guildSearch') {
+      ctx.fillStyle = 'rgba(0,0,0,.8)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#1a1228'; rbox(24, 280, W - 48, 160, 12); ctx.fill();
+      ctx.strokeStyle = '#4a6ac8'; ctx.lineWidth = 1.5; rbox(24, 280, W - 48, 160, 12); ctx.stroke();
+      txt('길드 검색', W / 2, 312, 14, '#fff', 'center');
+      txt('위 목록에서 가입할 길드를 선택해 주세요', W / 2, 338, 10, '#9a8ab5', 'center');
+      txt('(추후 이름 검색 기능 추가 예정)', W / 2, 356, 9, '#5a4a73', 'center');
+      btn(W / 2 - 50, 378, 100, 34, '닫기', function() { M = null; }, { bg:'#241d2e', fs:12 });
+    }
+    drawTopBar(); drawNav(); return;
+  }
+  if (!L.guildTab) L.guildTab = 'member';
+  const tabs = [['member','멤버'],['battle','토벌전'],['treasury','보물함']];
+  tabs.forEach(function(t, i) {
+    btn(12 + i * 114, 56, 110, 26, t[1], function() { L.guildTab = t[0]; L.guildY = 0; }, { on:L.guildTab === t[0], bg:L.guildTab === t[0] ? '#3a2a56' : '#1c1628', fs:12 });
+  });
+  ctx.fillStyle = '#1a1228'; rbox(12, 88, W - 24, 34, 6); ctx.fill();
+  txt('🏰 ' + g.name, 24, 108, 12, '#fff');
+  txt('기여도 ' + (g.contribution || 0), W / 2, 108, 11, '#ffd35a', 'center');
+  btn(W - 76, 90, 62, 30, '탈퇴', function() { M = { k:'guildLeave' }; }, { bg:'#3a1818', bc:'#8a3a3a', fs:10, fc:'#ff8a8a' });
+  const TOP = 128, BOT = NAV_Y - 4;
+  if (L.guildTab === 'member') {
+    GUILD_DUMMY_MEMBERS[GUILD_DUMMY_MEMBERS.length - 1].contribution = g.contribution || 0;
+    ctx.fillStyle = '#0e0a16'; ctx.fillRect(12, TOP, W - 24, 18);
+    txt('닉네임', 24, TOP + 12, 9, '#8a7aa5');
+    txt('기여도', W / 2, TOP + 12, 9, '#8a7aa5', 'center');
+    txt('마지막 접속', W - 20, TOP + 12, 9, '#8a7aa5', 'right');
+    const rh = 38, listTop = TOP + 18;
+    const maxSc = Math.max(0, GUILD_DUMMY_MEMBERS.length * rh - (BOT - listTop));
+    L.guildY = Math.max(0, Math.min(maxSc, L.guildY || 0));
+    ctx.save(); ctx.beginPath(); ctx.rect(0, listTop, W, BOT - listTop); ctx.clip();
+    GUILD_DUMMY_MEMBERS.forEach(function(m, i) {
+      const y = listTop + i * rh - L.guildY;
+      if (y + rh < listTop || y > BOT) return;
+      ctx.fillStyle = m.isMe ? '#241a38' : (i % 2 ? '#1c1628' : '#1a1428'); ctx.fillRect(12, y, W - 24, rh - 2);
+      const ri = m.role === 'master' ? '👑' : m.role === 'officer' ? '⚔️' : '';
+      txt(ri + m.name, 22, y + 16, 11, m.isMe ? '#ffd35a' : '#fff');
+      txt(['일반','부관','마스터'][['member','officer','master'].indexOf(m.role)] || '', 22, y + 30, 8, '#5a4a73');
+      txt(String(m.contribution), W / 2, y + 20, 11, '#c9a8ff', 'center');
+      txt(m.lastSeen, W - 20, y + 20, 10, '#8a7aa5', 'right');
+    });
+    ctx.restore();
+  } else if (L.guildTab === 'battle') {
+    const gk = weekKey();
+    if (g.weeklyKey !== gk) { g.weeklyClears = 0; g.weeklyKey = gk; }
+    const my = g.weeklyClears || 0, dummy = 87, total = my + dummy, goal = 150;
+    const pct = Math.min(1, total / goal);
+    txt('이번 주 길드 토벌전', W / 2, TOP + 22, 14, '#ffd35a', 'center');
+    txt('목표: 관문 클리어 합계 ' + goal + '회', W / 2, TOP + 42, 10, '#c9b8ff', 'center');
+    ctx.fillStyle = '#2a2040'; rbox(28, TOP + 52, W - 56, 20, 6); ctx.fill();
+    ctx.fillStyle = pct >= 1 ? '#6bdc7a' : '#8b5cf6'; rbox(28, TOP + 52, (W - 56) * pct, 20, 6); ctx.fill();
+    txt(total + ' / ' + goal, W / 2, TOP + 65, 11, '#fff', 'center');
+    txt('내 기여: 관문 ' + my + '회', 28, TOP + 84, 11, '#9ae8b5');
+    txt('다른 길드원: ' + dummy + '회', 28, TOP + 100, 11, '#9a8ab5');
+    if (pct >= 1) {
+      ctx.fillStyle = '#1a3a1a'; rbox(28, TOP + 116, W - 56, 50, 8); ctx.fill();
+      ctx.strokeStyle = '#6bdc7a'; ctx.lineWidth = 1.5; rbox(28, TOP + 116, W - 56, 50, 8); ctx.stroke();
+      txt('🏆 이번 주 목표 달성!', W / 2, TOP + 138, 13, '#6bdc7a', 'center');
+      txt('◆+500 · 영혼석 +20 보상 지급', W / 2, TOP + 156, 10, '#9ae8b5', 'center');
+    } else {
+      ctx.fillStyle = '#1a1228'; rbox(28, TOP + 116, W - 56, 50, 8); ctx.fill();
+      ctx.strokeStyle = '#3a2a56'; ctx.lineWidth = 1; rbox(28, TOP + 116, W - 56, 50, 8); ctx.stroke();
+      txt('달성 시 ◆+500 · 영혼석 +20', W / 2, TOP + 138, 11, '#9a8ab5', 'center');
+      txt('남은 목표: ' + Math.max(0, goal - total) + '회', W / 2, TOP + 156, 10, '#8a7aa5', 'center');
+    }
+    txt('* Firebase 연동 후 실시간 반영', W / 2, BOT - 10, 9, '#4a3a6a', 'center');
+  } else if (L.guildTab === 'treasury') {
+    txt('기여도 ' + (g.contribution || 0) + ' · 보상 교환', W / 2, TOP + 14, 11, '#ffd35a', 'center');
+    const gk = weekKey();
+    if (g.weeklyBossKey !== gk) { g.bossKills = 0; g.weeklyBossKey = gk; }
+    GUILD_TREASURY.forEach(function(item, i) {
+      const y = TOP + 26 + i * 66;
+      const claimed = g.treasuryClaimed[item.id] || 0;
+      const canClaim = (g.contribution || 0) >= item.cost && claimed < item.weekly;
+      ctx.fillStyle = '#1a1228'; rbox(12, y, W - 24, 58, 8); ctx.fill();
+      ctx.strokeStyle = canClaim ? '#6a4ac8' : '#2e2640'; ctx.lineWidth = 1; rbox(12, y, W - 24, 58, 8); ctx.stroke();
+      txt(item.name, 24, y + 18, 13, '#fff');
+      txt('주간 ' + claimed + '/' + item.weekly, 24, y + 36, 10, '#8a7aa5');
+      rewLabel(W / 2, y + 28, item.reward, 13, 'center');
+      const dis = !canClaim;
+      const btnLabel = claimed >= item.weekly ? '이번 주 완료' : dis ? '기여도 부족' : '기여도 -' + item.cost;
+      btn(W - 110, y + 12, 96, 34, btnLabel, function() {
+        if (!canClaim) return;
+        g.contribution -= item.cost;
+        g.treasuryClaimed[item.id] = claimed + 1;
+        grant(item.reward); persist(); toast(item.name + ' 수령!');
+      }, { bg:dis ? '#1a1428' : '#2a1a4a', bc:dis ? '#2e2640' : '#8a6ad8', fs:11, dis:dis });
+    });
+  }
+  drawTopBar(); drawNav();
 }
 
 /* 보스 그림 별칭: 새 그림이 오기 전까지 기존 용사 그림을 쓴다 */
