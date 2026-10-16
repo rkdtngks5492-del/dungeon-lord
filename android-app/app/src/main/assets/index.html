@@ -625,6 +625,7 @@ function buildMap(p) {
     R.nPre = pre.length; R.dFork = R.cum[1]; R.dMerge = R.cum[pre.length - 1]; R.dJoin = R.cum[pre.length]; R.rx = p.rx[r];
     ROADS[r] = R; ROAD_X[r] = p.rx[r];
   }
+  ROADS[3] = ROADS[0];   /* 몸통(road=3) 접근 시 road-0 데이터 사용 — 역방향 영웅 TypeError 방지 */
   OUTPOSTS.length = 0; ROOMS.length = 0;
   /* 거점 자리 (합류 전 구간 안에서의 비율). 교차로 구도는 B2가 정확히 교차점 */
   for (let r = 0; r < 3; r++) {
