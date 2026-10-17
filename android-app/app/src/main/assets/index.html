@@ -1308,6 +1308,33 @@ function stamNow() {
   return SAVE.stam;
 }
 function stamNext() { return Math.max(0, STAM.regenMin * 60000 - (Date.now() - SAVE.stamT)); }
+
+/* ===== 행동력 FULL 알림 ===== */
+let _stamWasFull = false;   /* 초기값은 루프 시작 후 첫 체크 때 설정 */
+let _notifAsked = false;
+function requestStamNotif() {
+  if (_notifAsked) return; _notifAsked = true;
+  try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission().catch(() => {}); } catch(e) {}
+}
+function sendStamFullNotif() {
+  const body = '⚡ 행동력이 가득 찼습니다! 던전에 출정하세요';
+  try {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('던전 로드', { body, icon:'' }); return;
+    }
+  } catch(e) {}
+  toast(body);
+}
+
+/* ===== 일일퀘스트 초기화 알림 ===== */
+function checkDailyReset() {
+  try {
+    const today = todayKey(), last = localStorage.getItem('lastQuestDay');
+    if (last && last !== today) setTimeout(() => toast('📋 일일퀘스트가 초기화되었습니다!'), 1400);
+    localStorage.setItem('lastQuestDay', today);
+  } catch(e) {}
+}
+
 function buyStam() {
   if (SAVE.soul < STAM.buySoul) { toast(CUR.soul.name + '이 부족해요'); return false; }
   stamNow(); SAVE.soul -= STAM.buySoul; SAVE.stam += STAM.buyAmt; persist();
@@ -2067,6 +2094,7 @@ function startBattle(i) {
   if (!SAVE.mteam.length) { toast('권속을 최소 1명은 편성해야 해요'); return; }
   if (stamNow() < STAM.cost) { M = { k:'stam', then:i }; return; }
   SAVE.stam -= STAM.cost; if (i !== ENDLESS) SAVE.lastStage = i; persist(); M = null;
+  requestStamNotif();   /* 첫 전투 시작 시 알림 권한 한 번 요청 */
   buildMap(layoutFor(i, 1)); reset(i); scene = 'game'; camSnap('prep'); segIntro(i);
   G.battleT = Date.now(); Analytics.log('stage_start', { stage_id: i });
 }
@@ -3445,8 +3473,17 @@ function drawTopBar() {
   pill(114, 4, 96, CUR.soul.ico, CUR.soul.col, String(SAVE.soul), () => { scene = 'shop'; }, '상단:영혼석');
   const st = stamNow();
   pill(214, 4, 140, CUR.stam.ico, CUR.stam.col, st + '/' + STAM.max, () => { M = { k:'stam' }; }, '상단:행동력');
-  if (st < STAM.max) txt(fmtT(stamNext()), 326, 15, 9, '#9a8ab5', 'right');
-  txt('+', 342, 15, 15, CUR.stam.col, 'center');
+  if (st < STAM.max) {
+    /* 다음 1 회복까지 타이머 — pill 위에 2줄로 오버레이 */
+    txt('다음 ' + fmtT(stamNext()), 352, 9, 8, '#9a8ab5', 'right');
+    txt('1 회복까지', 352, 22, 7, '#7a6a95', 'right');
+  } else {
+    /* 행동력 최대 — 초록 깜빡임 */
+    ctx.globalAlpha = 0.6 + Math.abs(Math.sin(T * 2.5)) * 0.4;
+    txt('FULL', 352, 15, 10, '#6bdc7a', 'right');
+    ctx.globalAlpha = 1;
+  }
+  txt('+', 357, 15, 13, CUR.stam.col, 'center');
 }
 function drawNav() {
   ctx.fillStyle = '#0c0812'; ctx.fillRect(0, NAV_Y, W, H - NAV_Y);
@@ -5903,11 +5940,20 @@ cv.addEventListener('wheel', e => { e.preventDefault(); if (scene !== 'game') { 
 
 /* ================= 루프 ================= */
 let last = performance.now();
+let _stamCheckAcc = 0;   /* 행동력 FULL 알림 체크 주기 누산 */
 function loop(now) {
   const rawDt = (now - last) / 1000; last = now;
   /* 프레임 시간을 33ms(30fps)로 클램프 — 느린 프레임이 더 많은 연산을 부르는 악순환 차단 */
   const dt = Math.min(0.033, rawDt);
   T += dt;
+  /* 60초마다 행동력 FULL 여부 확인, 이번 세션에서 처음 꽉 찼으면 알림 */
+  _stamCheckAcc += dt;
+  if (_stamCheckAcc >= 60) {
+    _stamCheckAcc = 0;
+    const isFull = stamNow() >= STAM.max;
+    if (isFull && !_stamWasFull) sendStamFullNotif();
+    _stamWasFull = isFull;
+  }
   advStep(dt);
   if (TOAST.t > 0) TOAST.t -= dt;
   if (scene === 'game' && !ADV.on && !ADV.wait && !G.paused && !M && !tutHold()) {
@@ -5925,6 +5971,8 @@ camSnap('prep');
 rankBoot();
 cpLoad();
 checkIdle();
+checkDailyReset();   /* 자정 기준 일일퀘스트 초기화 토스트 */
+_stamWasFull = stamNow() >= STAM.max;   /* 시작 시점의 행동력 상태 기록 */
 requestAnimationFrame(loop);
 
 /* ================= 옆면 전투 무대 =================
