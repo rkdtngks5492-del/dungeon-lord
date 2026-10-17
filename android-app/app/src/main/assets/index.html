@@ -2140,6 +2140,7 @@ function dist2(ax, az, bx, bz) { return Math.hypot(ax - bx, az - bz); }
    '길 중심에서 가로로 얼마나 떨어졌나'로 판정해서 경계에서 왔다 갔다 하는 일이 없고, 양쪽이 똑같이 보인다. */
 function meet(u, h) {
   if (u.road === 3) return onTrunk(h);
+  if (h.road === 3) return onTrunk(u) || roadDist(u.road, h.x, h.z) <= 44;   /* 역방향 영웅(road=3)은 trunk에 있으면 모두 만난다 */
   return roadDist(h.road, u.x, u.z) <= 44 && roadDist(u.road, h.x, h.z) <= 44;   /* 서로 상대 길 위(옆)에 있어야 마주친다 */
 }
 function heroSees(h, u) { return meet(u, h); }
@@ -2198,8 +2199,8 @@ function foeFor(att, elig, reach) {
   for (const f of pool) {
     const d = dist2(att.x, att.z, f.x, f.z);
     if (reach && d > att.def.rng) continue;
-    /* 원거리 공격: 벽 너머 다른 길의 적은 노릴 수 없다 */
-    if (reach && att.def.shot) {
+    /* 사거리 공격: 벽 너머 다른 길의 적은 노릴 수 없다 (근접·원거리 모두) */
+    if (reach) {
       const mn = att.def.side === 'D' ? att : f, hr = att.def.side === 'D' ? f : att;
       if (!meet(mn, hr)) continue;
     }
@@ -2859,6 +2860,14 @@ function update(dt) {
         const nd = Math.min(ROADS[h.road].len, projD(h.road, h.x, h.z, h.d) + h.spd * (h.slow > 0 ? (h.slowF || 0.5) : 1) * dt), q = pathPos(h.road, nd);
         const dx = q[0] + h.fx * 0.3 - h.x, dz = q[1] - h.z; h.x += dx; h.z += dz;
         if (Math.abs(dx) + Math.abs(dz) > 0.01) { h.yaw = Math.atan2(dx, dz); h.moving = 1; }
+      } else if (P.fight) {
+        /* 교전 중이지만 자기 대상이 없는 유닛: 무리 평균 위치로 서서히 따라간다 */
+        const wd = Math.min(ROADS[h.road].len, P.dAvg + h.fz), want = pathPos(h.road, wd), tdir = roadDir(h.road, wd);
+        const k = Math.min(1, dt * 2.5);
+        const px = h.x, pz = h.z;
+        h.x += (want[0] + h.fx * tdir[1] - h.x) * k; h.z += (want[1] - h.fx * tdir[0] - h.z) * k;
+        const ddx = h.x - px, ddz = h.z - pz;
+        if (Math.abs(ddx) + Math.abs(ddz) > 0.01) { h.yaw = Math.atan2(ddx, ddz); h.moving = 1; }
       } else if (!P.fight) {
         const wd = Math.min(ROADS[h.road].len, P.d + h.fz), want = pathPos(h.road, wd), tdir = roadDir(h.road, wd), k = Math.min(1, dt * 3.2 * CRUISE);
         const px = h.x, pz = h.z;
