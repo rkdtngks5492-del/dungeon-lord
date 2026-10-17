@@ -2412,7 +2412,7 @@ function knock(v, fx, fz, p) {
   const kl = Math.hypot(v.kbx, v.kbz);
   if (kl > KB_MAX) { v.kbx *= KB_MAX / kl; v.kbz *= KB_MAX / kl; }
 }
-function fxText(x, z, t, col) { G.fx.push({ k:'txt', x, y:30, z, txt:t, col, life:0.9, max:0.9 }); }
+function fxText(x, z, t, col, sz) { G.fx.push({ k:'txt', x, y:30, z, txt:t, col, life:0.9, max:0.9, sz:sz||13 }); }
 function fxShot(x1, z1, x2, z2, col) {
   const d = Math.hypot(x2 - x1, z2 - z1);
   G.bolts.push({ x:x1, z:z1, x1, z1, x2, z2, col, t:0, dur:Math.max(0.09, d / 820) });
@@ -2472,6 +2472,8 @@ function startWave() {
   G.pending = G.plan.map(p => ({ road:p.road, members:p.members, t:p.delay + 1.2 }));
   G.parties = []; G.waveT = 0; G.phase = 'run'; camTo('battle', 1.3); SFX.wave();
   G.cdown = { t: 0, phase: 3 };   /* 시각 전용: 1.2초 뒤에 적 등장, 그 사이 카운트다운 표시 */
+  G.wKills = 0; G.wDmgTaken = 0;
+  for (const b of G.rooms) if (b) b.wKills = 0;
 }
 /* 무리 하나를 입구에 세운다. 전열이 앞, 지원이 맨 뒤인 대형으로 함께 걷는다. */
 function spawnParty(pp) {
@@ -2839,7 +2841,7 @@ function update(dt) {
         const _st = G.stones ? (G.stones[h.road <= 2 ? h.road : 0] || G.stones[0]) : STONE;
         h.fighting = true;
         h.yaw = Math.atan2(_st.x - h.x, _st.z - h.z);
-        if (h.cd <= 0) { const dm = Math.max(h.dmg, 3) * (df.slayer || 1); h.cd = df.cd * h.cdm; h.atk = 1; if (G.stones) { _st.hp -= dm; } else { G.stone -= dm; } buzz(30); fxText(_st.x, _st.z, '-' + Math.round(dm), '#ff3b3b'); burst(_st.x, 30, _st.z, 5, '#c77dff', 50); SFX.stone(); hitstop(0.04); shake = Math.max(shake, 5); }
+        if (h.cd <= 0) { const dm = Math.max(h.dmg, 3) * (df.slayer || 1); h.cd = df.cd * h.cdm; h.atk = 1; if (G.stones) { _st.hp -= dm; } else { G.stone -= dm; } G.wDmgTaken = (G.wDmgTaken||0) + dm; buzz(30); fxText(_st.x, _st.z, '-' + Math.round(dm), '#ff3b3b'); burst(_st.x, 30, _st.z, 5, '#c77dff', 50); SFX.stone(); hitstop(0.04); shake = Math.max(shake, 5); }
       } else if (near.length && h.def.role !== 'support') {
         /* 적이 보이면 무리가 멈추고, 각자 맞는 상대를 향해 달려든다 */
         h.fighting = true;
@@ -2997,13 +2999,17 @@ function update(dt) {
       const vic = b.def.aoe ? G.heroes.filter(h => unitSees(b, h) && dist2(h.x, h.z, tg.x, tg.z) < 52) : [tg];
       const big2 = b.dmg >= 18;
       for (const v of vic) {
-        const c = v.markT > 0 && v.markBy !== b, amt = b.dmg * (c ? COMBO : 1) * (featAt(b.x, b.z, 'altar') ? FEAT.altar.dmg : 1) * (b.curseT > 0 ? 1 - (b.curseF || 0) : 1);
+        const c = v.markT > 0 && v.markBy !== b;
+        const crit = !c && Math.random() < 0.2;
+        const amt = b.dmg * (c ? COMBO : crit ? 1.5 : 1) * (featAt(b.x, b.z, 'altar') ? FEAT.altar.dmg : 1) * (b.curseT > 0 ? 1 - (b.curseF || 0) : 1);
         v.markT = 0.8; v.markBy = b;
         const dd = dmgHero(v, amt, false, b);
+        v.lastHitBy = b;
         if (US.pass.ls) b.hp = Math.min(b.maxHp, b.hp + dd * US.pass.ls);
-        fxText(v.x, v.z, (c ? '연계 ' : '') + '-' + Math.round(dd), c ? '#ffe36b' : '#ffffff');
-        sev('hit', b, v, dd, { shot:!!b.def.shot, combo:c, col:b.def.shot ? '#e8e8ff' : '#ffffff' });
-        burst(v.x, 16, v.z, 4, '#ffffff', 46, v.x - b.x, v.z - b.z);
+        const dmgCol = c ? '#ffe36b' : crit ? '#ffd700' : '#ffffff';
+        fxText(v.x, v.z, (c ? '연계 ' : '') + '-' + Math.round(dd), dmgCol, crit ? 18 : 13);
+        sev('hit', b, v, dd, { shot:!!b.def.shot, combo:c, col:b.def.shot ? '#e8e8ff' : dmgCol });
+        burst(v.x, 16, v.z, crit ? 7 : 4, '#ffffff', crit ? 60 : 46, v.x - b.x, v.z - b.z);
         knock(v, v.x - b.x, v.z - b.z, Math.min(11, b.dmg * 0.5));
         if (b.def.slow) { v.slow = 1.5; v.slowF = b.def.slow; }
       }
@@ -3067,6 +3073,8 @@ function update(dt) {
   }
   /* 체력이 0 이하(또는 계산 오류로 숫자가 아니면)면 어떤 상태든 반드시 쓰러진다 */
   for (const h of G.heroes) if (!(h.hp > 0)) {
+    G.wKills = (G.wKills||0) + 1;
+    if (h.lastHitBy) h.lastHitBy.wKills = (h.lastHitBy.wKills||0) + 1;
     const rew = Math.round(h.def.rew * (1 + dexBonus().heroGem));
     G.gems += rew; sev('gem', null, h, rew); fxText(h.x, h.z, '+' + rew, '#8be9ff'); burst(h.x, 16, h.z, 10, '#8be9ff', 60);
     questAdd('kill'); questAdd('w_kill');
@@ -3080,27 +3088,45 @@ function update(dt) {
   if (G.stone <= 0 || (G.stones && G.stones.some(s => s.hp <= 0))) { G.stone = 0; if (G.stones) G.stones.forEach(s => s.hp = 0); G.phase = 'lose'; shake = 18; punch(50); Analytics.log('stage_fail', { stage_id: G.stage, wave: G.wIdx + 1 }); finishBattle(); SFX.lose(); buzz(300, true); return; }
   if (!G.pending.length && !G.heroes.length) {
     G.gems += WAVE_GEMS;
-    if (!G.endless && G.wIdx >= waveCount() - 1) { G.phase = 'win'; Analytics.log('stage_clear', { stage_id: G.stage, duration_sec: Math.round((Date.now() - (G.battleT || 0)) / 1000) }); finishBattle(); SFX.win(); }
-    else {
-      G.wIdx++; G.phase = 'prep';
-      for (const r of G.revive) if (!G.rooms[r.i]) {
-        G.rooms[r.i] = { key:r.key, def:r.def, hp:r.maxHp, maxHp:r.maxHp, dmg:r.dmg, extra:r.extra, cd:0, road:ROOMS[r.i].road, spent:false, markT:0,
-                         x:r.hx, z:r.hz, hx:r.hx, hz:r.hz, d:r.d, homeD:r.d, yaw:0, atk:0, hitT:0,
-                         bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 };
-      }
-      G.revive = [];
-      for (let i = 0; i < NROOM; i++) if (G.rooms[i] && G.rooms[i].mini) G.rooms[i] = null;
-      const used = {}; for (const b of G.rooms) if (b && !b.extra) used[b.key] = (used[b.key] || 0) + 1;
-      const hand = {}; for (const k of SAVE.mteam.concat(SAVE.tteam)) hand[k] = used[k] ? 0 : 1;
-      G.hand = hand;
-      for (const b of G.rooms) if (b) { b.hp = b.maxHp; b.x = b.hx; b.z = b.hz; b.d = b.homeD; b.spent = false; if (b.rush) { b.rush = false; b.road = b.homeRoad; } }
-      if (G.endless) endlessRelayout();
-      G.parties = []; G.plan = planWave();
-      G.moveCd = 0; G.lastPlace = null; camTo('prep', 1.2);
-      say('웨이브 돌파! 수정 +' + WAVE_GEMS + ' · 권속 회복 · 함정 재장전');
-      cpSave();
+    const lastWave = !G.endless && G.wIdx >= waveCount() - 1;
+    let topKiller = null, topK = 0;
+    for (const b of G.rooms) if (b && (b.wKills||0) > topK) { topK = b.wKills; topKiller = { name: b.def.name, kills: topK }; }
+    G.wResult = {
+      t: 0,
+      stonePct: Math.round(G.stone / G.maxStone * 100),
+      kills: G.wKills || 0,
+      topKiller: topK > 0 ? topKiller : null,
+      dmgTaken: Math.round(G.wDmgTaken || 0),
+      lastWave,
+    };
+    if (lastWave) {
+      G.phase = 'win';
+      Analytics.log('stage_clear', { stage_id: G.stage, duration_sec: Math.round((Date.now() - (G.battleT || 0)) / 1000) });
+      finishBattle(); SFX.win();
+    } else {
+      G.phase = 'result';
     }
   }
+}
+function closeWaveResult() {
+  G.wResult = null;
+  G.wIdx++; G.phase = 'prep';
+  for (const r of G.revive) if (!G.rooms[r.i]) {
+    G.rooms[r.i] = { key:r.key, def:r.def, hp:r.maxHp, maxHp:r.maxHp, dmg:r.dmg, extra:r.extra, cd:0, road:ROOMS[r.i].road, spent:false, markT:0,
+                     x:r.hx, z:r.hz, hx:r.hx, hz:r.hz, d:r.d, homeD:r.d, yaw:0, atk:0, hitT:0,
+                     bobOff:Math.random() * 6.283, moving:0, spawnT:1, kbx:0, kbz:0, dustT:0 };
+  }
+  G.revive = [];
+  for (let i = 0; i < NROOM; i++) if (G.rooms[i] && G.rooms[i].mini) G.rooms[i] = null;
+  const used = {}; for (const b of G.rooms) if (b && !b.extra) used[b.key] = (used[b.key] || 0) + 1;
+  const hand = {}; for (const k of SAVE.mteam.concat(SAVE.tteam)) hand[k] = used[k] ? 0 : 1;
+  G.hand = hand;
+  for (const b of G.rooms) if (b) { b.hp = b.maxHp; b.x = b.hx; b.z = b.hz; b.d = b.homeD; b.spent = false; if (b.rush) { b.rush = false; b.road = b.homeRoad; } }
+  if (G.endless) endlessRelayout();
+  G.parties = []; G.plan = planWave();
+  G.moveCd = 0; G.lastPlace = null; camTo('prep', 1.2);
+  say('웨이브 돌파! 수정 +' + WAVE_GEMS + ' · 권속 회복 · 함정 재장전');
+  cpSave();
 }
 
 /* ================= 광고 ================= */
@@ -5018,7 +5044,7 @@ function drawScene() {
     ctx.globalAlpha = Math.min(1, a * 1.8);
     ctx.save(); ctx.translate(s[0], s[1]); ctx.scale(grow, grow);
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.65)';
-    ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold ' + (f.sz||13) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.strokeText(f.txt, 0, 0); ctx.fillStyle = f.col; ctx.fillText(f.txt, 0, 0);
     ctx.restore(); ctx.globalAlpha = 1;
   }
@@ -5268,6 +5294,46 @@ function drawGame() {
     grad.addColorStop(1, 'rgba(255,0,0,' + (0.25 + Math.sin(T * 6) * 0.15) + ')');
     ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
     ctx.restore();
+  }
+
+  /* 웨이브 결과 패널 */
+  if (G.wResult && G.phase === 'result') {
+    const wr = G.wResult;
+    /* 전체 화면 탭 차단 (패널 등장 전에도) */
+    BTN.push({ x:0, y:0, w:W, h:H, act:()=>{}, label:'result-bg' });
+    const alpha = wr.t >= 1.5 ? Math.min(1, (wr.t - 1.5) / 0.35) : 0;
+    if (alpha > 0) {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.82;
+      ctx.fillStyle = 'rgba(8,4,18,1)'; ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = alpha;
+      const pw = 290, ph = 270, px = (W - pw) / 2, py = (H - ph) / 2 - 20;
+      ctx.fillStyle = 'rgba(22,14,38,.98)'; rbox(px, py, pw, ph, 14); ctx.fill();
+      ctx.strokeStyle = '#7c5fc8'; ctx.lineWidth = 1.5; ctx.globalAlpha = alpha * 0.7;
+      rbox(px, py, pw, ph, 14); ctx.stroke();
+      ctx.globalAlpha = alpha;
+      ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#c9b8ff'; ctx.fillText('웨이브 ' + G.wIdx + ' 결과', W / 2, py + 22);
+      ctx.strokeStyle = '#3a2f52'; ctx.lineWidth = 1; ctx.globalAlpha = alpha * 0.5;
+      ctx.beginPath(); ctx.moveTo(px + 16, py + 38); ctx.lineTo(px + pw - 16, py + 38); ctx.stroke();
+      ctx.globalAlpha = alpha;
+      const row = (label, value, col, ry) => {
+        ctx.font = '13px sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = '#9989b5';
+        ctx.fillText(label, px + 22, py + ry);
+        ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = col || '#e8e0ff';
+        ctx.fillText(value, px + pw - 22, py + ry);
+      };
+      const sPct = wr.stonePct;
+      row('수호석 잔여', sPct + '%', sPct >= 80 ? '#6bdc7a' : sPct >= 50 ? '#ffd35a' : '#ff6b6b', 62);
+      row('처치한 용사', wr.kills + '명', '#8be9ff', 88);
+      row('받은 피해', Math.round(wr.dmgTaken), '#ff9a7a', 114);
+      row('최다 킬 권속', wr.topKiller ? wr.topKiller.name + '  ' + wr.topKiller.kills + '킬' : '-', wr.topKiller ? '#ffd35a' : '#555', 140);
+      ctx.strokeStyle = '#3a2f52'; ctx.lineWidth = 1; ctx.globalAlpha = alpha * 0.4;
+      ctx.beginPath(); ctx.moveTo(px + 16, py + 158); ctx.lineTo(px + pw - 16, py + 158); ctx.stroke();
+      ctx.globalAlpha = alpha;
+      btn(px + 20, py + 170, pw - 40, 46, '다음 웨이브  ▶', closeWaveResult, { bg:'#2e1d52', on:true, fs:14, fc:'#c9b8ff' });
+      ctx.restore();
+    }
   }
 
   /* Feature 1: 웨이브 카운트다운 오버레이 (시각 전용) */
@@ -5719,7 +5785,8 @@ function loop(now) {
   if (TOAST.t > 0) TOAST.t -= dt;
   if (scene === 'game' && !ADV.on && !ADV.wait && !G.paused && !M && !tutHold()) {
     tickCdown(dt);               /* 카운트다운은 실시간 — 배속 영향 받지 않음 */
-    if (G.hs > 0) G.hs -= dt;
+    if (G.wResult && G.phase === 'result') { G.wResult.t += dt; G.fx.forEach(f => { f.life -= dt; }); G.fx = G.fx.filter(f => f.life > 0); }
+    else if (G.hs > 0) G.hs -= dt;
     else update(dt * G.speed);   /* 배속은 dt를 늘려서 표현 — update() 는 프레임당 반드시 1회만 */
     camStep(dt);
   }
