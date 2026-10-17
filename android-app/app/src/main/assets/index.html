@@ -1534,6 +1534,33 @@ function passDesc(P) {
   return Object.keys(P).filter(q => q !== 'name').map(q => nm[q] + ' +' + Math.round(P[q] * 100) + '%').join(', ');
 }
 
+/* ===== 덱 코드 인코딩 ===== */
+const UNIT_ABR = {
+  slime:'SLM', goblin:'GOB', bat:'BAT', skel:'SKL', imp:'IMP', ghost:'GHO',
+  golem:'GLM', witch:'WTC', dragon:'DRG', wolf:'WLF', zombie:'ZMB', spider:'SPI',
+  darkkn:'DKN', succub:'SUB', lich:'LCH', demon:'DMN', minotaur:'MNT', gargoyle:'GGL',
+  spikes:'SPK', web:'WEB', rock:'ROK', fire:'FIR', poison:'PSN', ice:'ICE',
+  bolt:'BLT', lava:'LVA', rift:'RFT', snare:'SNR', gas:'GAS', blade:'BLD',
+  curse:'CRS', toxic:'TXK', vent:'VNT', boulder:'BDR', frost:'FRS', mine:'MNE',
+  camo:'CAM', decoy:'DCY', vine:'VNE', mirror:'MRR', manapil:'MNP', silrune:'SLR',
+  altar:'ALT', ballista:'BLS', ceiling:'CLG', gate:'GTE',
+};
+const ABR_TO_KEY = {};
+for (const _k in UNIT_ABR) ABR_TO_KEY[UNIT_ABR[_k]] = _k;
+function encodeDeck() {
+  const ms = SAVE.mteam.map(k => UNIT_ABR[k] || '???').join('-');
+  const ts = SAVE.tteam.map(k => UNIT_ABR[k] || '???').join('-');
+  return ms + (ts ? '~' + ts : '') + '-v1';
+}
+function decodeDeck(code) {
+  const c = code.trim().toUpperCase().replace(/-V1$/, '');
+  const parts = c.split('~');
+  const parse = str => str ? str.split('-').map(s => ABR_TO_KEY[s]).filter(Boolean) : [];
+  const mteam = parse(parts[0]).filter(k => DEF[k] && DEF[k].kind === 'minion');
+  const tteam = parse(parts[1] || '').filter(k => DEF[k] && DEF[k].kind === 'trap');
+  return mteam.length ? { mteam, tteam } : null;
+}
+
 /* ================= 관리자 모드 ================= */
 let ADMIN_MODE = false, _adminTaps = 0, _adminTapT = 0;
 function toggleAdmin() {
@@ -1975,7 +2002,8 @@ function reset(stage) {
         msg:'빈 칸을 누르고 카드를 배치하세요', msgT:4, gems:0, done:false, doubled:false, usedContinue:false,
         scd, skc:{}, frenzy:0, seal:0, aim:null, moveFrom:-1, moveCd:0, hs:0, smites:[],
         /* Feature 2 */ lastPlace:null,
-        /* Feature 4 */ waveTotal:0, cdown:null };
+        /* Feature 4 */ waveTotal:0, cdown:null,
+        totalKills:0, totalDmgDealt:0 };
   /* 삼각 분열 레이아웃: 길마다 수호석 */
   if (LAYOUT && LAYOUT.multiStone) {
     const sHp = Math.round(stone * 0.4);
@@ -2182,6 +2210,8 @@ function finishBattle() {
       }
     }
     SAVE.stars[G.stage] = Math.max(SAVE.stars[G.stage] || 0, G.stars);
+    G.clearTime = Math.round((Date.now() - (G.battleT||Date.now())) / 1000);
+    { let topD = 0, topDmg = null; for (const b of G.rooms) if (b && (b.dmgDealt||0) > topD) { topD = b.dmgDealt; topDmg = { name:b.def.name, dmg:Math.round(topD) }; } G.clearStats = { kills:G.totalKills||0, dmg:Math.round(G.totalDmgDealt||0), topDmgDealer:topDmg, time:G.clearTime }; }
     rankRecordStage(G.stage, r * 100);
     questAdd('clear'); questAdd('w_clear');
     if (SAVE.guild && SAVE.guild.joined) {
@@ -2329,7 +2359,10 @@ function dmgHero(h, amt, spell, from) {
   let d = amt * (1 - (h.dr || 0)) * (h.vulnT > 0 ? 1 + h.vulnF : 1);
   if (h.def.front && from && from.z > h.z) d *= 1 - h.def.front;   /* 기사: 방패로 정면 공격을 막는다 */
   if (h.shield > 0 && !spell) { const a = Math.min(h.shield, d); h.shield -= a; d -= a; }
-  h.hp -= d; h.hitT = 1; return d;
+  h.hp -= d; h.hitT = 1;
+  if (from && from.key) from.dmgDealt = (from.dmgDealt||0) + d;
+  G.totalDmgDealt = (G.totalDmgDealt||0) + d;
+  return d;
 }
 /* 권속이 받는 피해: 무적(석화) → 0, 수호·패시브 피해 감소 적용. 탱커는 맞을 때 스킬 게이지 추가 충전 */
 function dmgMinion(v, amt, pierce) {
@@ -3152,6 +3185,7 @@ function update(dt) {
   /* 체력이 0 이하(또는 계산 오류로 숫자가 아니면)면 어떤 상태든 반드시 쓰러진다 */
   for (const h of G.heroes) if (!(h.hp > 0)) {
     G.wKills = (G.wKills||0) + 1;
+    G.totalKills = (G.totalKills||0) + 1;
     if (h.lastHitBy) h.lastHitBy.wKills = (h.lastHitBy.wKills||0) + 1;
     const rew = Math.round(h.def.rew * (1 + dexBonus().heroGem));
     G.gems += rew; sev('gem', null, h, rew); fxText(h.x, h.z, '+' + rew, '#8be9ff'); burst(h.x, 16, h.z, 10, '#8be9ff', 60);
@@ -3697,16 +3731,17 @@ function drawLobby() {
       { bg:'#241d2e', fs:9, fc:fi <= 0 ? '#fff' : RAR_COL[FILTS[fi]] });
   btn(274, 346, 74, 24, (SAVE.lfirst ? '☑' : '☐') + ' 편성 먼저', () => { SAVE.lfirst = !SAVE.lfirst; persist(); }, { bg:SAVE.lfirst ? '#3a2a56' : '#241d2e', fs:9, fc:SAVE.lfirst ? '#ffd35a' : '#c9b8ff' });
   /* Feature 6: 덱 프리셋 버튼 행 */
-  { const prx = 12, pry = 373, prw = (W - 24 - 8) / 3, prg = 4;
+  { const prx = 12, pry = 373, prg = 4, prw = Math.floor((W - 24 - prg * 3) / 4);
     for (let si = 0; si < 3; si++) {
       const px = prx + si * (prw + prg), p6 = SAVE.deckPresets[si], hasP = !!p6;
       if (hasP) {
-        btn(px, pry, prw - 16, 20, (p6.name || ('프리셋' + (si + 1))).slice(0, 7), () => loadPreset(si), { bg:'#1e3050', fs:9, fc:'#8be9ff' });
-        btn(px + prw - 14, pry, 14, 20, '✕', () => clearPreset(si), { bg:'#3a1a28', fs:8, fc:'#ff7a7a' });
+        btn(px, pry, prw - 14, 20, (p6.name || ('프리셋' + (si + 1))).slice(0, 6), () => loadPreset(si), { bg:'#1e3050', fs:9, fc:'#8be9ff' });
+        btn(px + prw - 12, pry, 12, 20, '✕', () => clearPreset(si), { bg:'#3a1a28', fs:8, fc:'#ff7a7a' });
       } else {
-        btn(px, pry, prw, 20, '[ 프리셋' + (si + 1) + ' 저장 ]', () => savePreset(si), { bg:'#1a1828', fs:9, fc:'#5a4a73' });
+        btn(px, pry, prw, 20, '프리셋' + (si + 1), () => savePreset(si), { bg:'#1a1828', fs:9, fc:'#5a4a73' });
       }
     }
+    btn(prx + 3 * (prw + prg), pry, prw, 20, '🔗 코드', () => { M = { k:'deckCode' }; }, { bg:'#1a2640', fs:9, fc:'#8be9ff' });
   }
   /* ===== 시너지 바 ===== */
   { const syns = calcSynergies(SAVE.mteam);
@@ -4439,8 +4474,44 @@ function panel(x, y, w, h, title) {
 function drawModal() {
   if (!M) return;
   BTN = [];   /* 아래 화면 버튼은 막는다 */
-  ({ autoteam:mAutoTeam, trap:mTrap, confirm:mConfirm, depth:mDepth, rec:mRec, tip:mTip, help:mHelp, story:mStory, exit:mExit, stam:mStam, quest:mQuest, att:mAtt, box:mBox, mail:mMail, clear:mClear, unit:mUnit, idle:mIdle, cardTip:mCardTip })[M.k](M);
+  ({ autoteam:mAutoTeam, trap:mTrap, confirm:mConfirm, depth:mDepth, rec:mRec, tip:mTip, help:mHelp, story:mStory, exit:mExit, stam:mStam, quest:mQuest, att:mAtt, box:mBox, mail:mMail, clear:mClear, unit:mUnit, idle:mIdle, cardTip:mCardTip, deckCode:mDeckCode })[M.k](M);
   BTN.push({ x:0, y:0, w:W, h:H, act:() => {}, label:'팝업 바깥' });
+}
+function captureScreen() {
+  if (!G || G.phase !== 'win') return;
+  const S = curStage();
+  const stonePct = Math.round(G.stone / G.maxStone * 100);
+  const stars = G.stars || 0;
+  const wm = '마왕의 던전  제' + S.no + '관문 클리어!  ' + '★'.repeat(stars) + '☆'.repeat(3 - stars) + '  수호석 ' + stonePct + '%';
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,.65)'; ctx.fillRect(0, H - 32, W, 32);
+  ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffd35a'; ctx.fillText(wm, W / 2, H - 16);
+  ctx.restore();
+  if (navigator.share) {
+    cv.toBlob(blob => {
+      const file = new File([blob], 'dungeon-clear.png', { type:'image/png' });
+      navigator.share({ title:'마왕의 던전 클리어!', text:wm, files:[file] }).catch(() => {});
+    }, 'image/png');
+  } else {
+    const url = cv.toDataURL('image/png');
+    const a = document.createElement('a'); a.href = url; a.download = 'dungeon-clear.png';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+  toast('화면 저장!');
+}
+function shareResult() {
+  if (!G || G.phase !== 'win') return;
+  const S = curStage();
+  const stonePct = Math.round(G.stone / G.maxStone * 100);
+  const stars = G.stars || 0;
+  const text = '마왕의 던전 제' + S.no + '관문 클리어! ' + '★'.repeat(stars) + ' 수호석 ' + stonePct + '%  처치 ' + (G.clearStats ? G.clearStats.kills : '?') + '명';
+  if (navigator.share) {
+    navigator.share({ title:'마왕의 던전 클리어!', text }).catch(() => {});
+  } else {
+    try { navigator.clipboard.writeText(text).catch(() => {}); } catch (e) {}
+    toast('결과가 클립보드에 복사됐어요!');
+  }
 }
 /* ===== 권속 카드 상세 툴팁 (길게 누르기) ===== */
 function mCardTip(m) {
@@ -4515,6 +4586,26 @@ function mCardTip(m) {
   }
   txt('길게 눌러 열림 · 아무 곳이나 눌러서 닫기', W / 2, py + ph - 12, 8, '#4a3a6a', 'center');
   BTN.unshift({ x:0, y:0, w:W, h:H, act:() => { M = null; }, label:'툴팁닫기' });
+}
+function mDeckCode() {
+  const code = encodeDeck();
+  panel(24, 196, W - 48, 300, '덱 코드 공유');
+  txt('이 코드로 덱을 공유하거나 가져올 수 있어요', W / 2, 234, 9, '#9a8ab5', 'center');
+  ctx.fillStyle = '#0e0a16'; rbox(36, 248, W - 72, 36, 8); ctx.fill();
+  ctx.strokeStyle = '#5a4a7a'; ctx.lineWidth = 1; rbox(36, 248, W - 72, 36, 8); ctx.stroke();
+  txt(code, W / 2, 266, 9, '#ffd35a', 'center');
+  btn(36, 294, (W - 88) / 2, 42, '📋 복사', () => {
+    try { navigator.clipboard.writeText(code).catch(() => {}); } catch (e) {}
+    toast('덱 코드가 복사됐어요!'); M = null;
+  }, { bg:'#2a3a5a', fs:12, on:true });
+  btn(W / 2 + 8, 294, (W - 88) / 2, 42, '📥 불러오기', () => {
+    const inp = prompt('덱 코드를 입력하세요');
+    if (!inp) return;
+    const deck = decodeDeck(inp);
+    if (!deck) { toast('올바른 코드가 아니에요'); return; }
+    SAVE.mteam = deck.mteam; SAVE.tteam = deck.tteam; persist(); M = null; toast('덱 구성이 적용됐어요!');
+  }, { bg:'#2a3a2a', fs:12 });
+  btn(W / 2 - 60, 346, 120, 40, '닫기', () => { M = null; }, { bg:'#2a2140', fs:12 });
 }
 function mStam(m) {
   panel(36, 210, W - 72, 250, '행동력 충전');
@@ -5446,6 +5537,17 @@ function drawGame() {
         if (G.first && G.soulBonus) txt('영혼석 첫 클리어 보상 ◈+' + G.soulBonus, W / 2, G.first && G.stage === 14 ? 350 : 334, 11, '#c77dff', 'center');
         if (G.first && G.firstBonus) txt('첫 관문 신규 보너스 ◆+' + G.firstBonus, W / 2, G.first && G.soulBonus ? 350 : 334, 11, '#8be9ff', 'center');
         txt('획득 ◆ ' + G.gems, W / 2, (G.first && G.soulBonus) || (G.first && G.firstBonus) ? 368 : 348, 19, '#8be9ff', 'center');
+        /* 전투 통계 */
+        if (G.clearStats) {
+          const cs = G.clearStats;
+          const mm = Math.floor(cs.time/60), ss = cs.time%60, ts = mm + ':' + String(ss).padStart(2,'0');
+          ctx.fillStyle = 'rgba(20,14,38,.72)'; rbox(30, 384, W-60, 58, 10); ctx.fill();
+          ctx.strokeStyle = '#3a2f52'; ctx.lineWidth = 0.8; rbox(30, 384, W-60, 58, 10); ctx.stroke();
+          txt('총 처치', 44, 402, 9, '#9989b5'); txt(cs.kills + '명', W/2-8, 402, 11, '#8be9ff', 'right');
+          txt('클리어', W/2+4, 402, 9, '#9989b5'); txt(ts, W-44, 402, 11, '#ffd35a', 'right');
+          txt('총 피해', 44, 430, 9, '#9989b5'); txt(cs.dmg.toLocaleString('en-US'), W/2-8, 430, 11, '#ff9a7a', 'right');
+          txt('주력 권속', W/2+4, 430, 9, '#9989b5'); txt(cs.topDmgDealer ? cs.topDmgDealer.name : '-', W-44, 430, 11, '#ffd35a', 'right');
+        }
     } else if (!win) {
         txt('수호석이 부서졌다', W / 2, 250, 24, '#ff6b6b', 'center');
         txt('제' + S.no + '관문 · ' + S.name, W / 2, 286, 14, '#c9b8ff', 'center');
@@ -5453,7 +5555,11 @@ function drawGame() {
     }
     const canDouble = !G.doubled && G.gems > 0;
     const canCont = !G.usedContinue && G.phase === 'lose';
-    let by = 400;
+    let by = 452;
+    if (G.phase === 'win' && !G.endless) {
+      btn(36, by - 48, (W-84)/2, 38, '📸 스크린샷', captureScreen, { bg:'#1a2a3a', fs:11 });
+      btn(W/2+6, by - 48, (W-84)/2, 38, '공유하기', shareResult, { bg:'#1a2a3a', fs:11 });
+    }
     if (canCont) {
       btn(40, by, W - 80, 46, '광고 보고 이어하기', continueRun, { bg:'#2b4a3a', on:true, fs:14, sub:'수호석 50% 회복 · 1회만', sc:'#9ae8b5' });
       by += 54;
