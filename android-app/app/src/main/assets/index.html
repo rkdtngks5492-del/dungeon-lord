@@ -5779,15 +5779,13 @@ function drawGame() {
   /* 웨이브 결과 패널 */
   if (G.wResult && G.phase === 'result') {
     const wr = G.wResult;
-    /* 전체 화면 탭 차단 (패널 등장 전에도) */
-    BTN.push({ x:0, y:0, w:W, h:H, act:()=>{}, label:'result-bg' });
     const alpha = wr.t >= 1.5 ? Math.min(1, (wr.t - 1.5) / 0.35) : 0;
     if (alpha > 0) {
       ctx.save();
       ctx.globalAlpha = alpha * 0.82;
       ctx.fillStyle = 'rgba(8,4,18,1)'; ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = alpha;
-      const pw = 290, ph = 270, px = (W - pw) / 2, py = (H - ph) / 2 - 20;
+      const pw = 290, ph = 280, px = (W - pw) / 2, py = (H - ph) / 2 - 20;
       ctx.fillStyle = 'rgba(22,14,38,.98)'; rbox(px, py, pw, ph, 14); ctx.fill();
       ctx.strokeStyle = '#7c5fc8'; ctx.lineWidth = 1.5; ctx.globalAlpha = alpha * 0.7;
       rbox(px, py, pw, ph, 14); ctx.stroke();
@@ -5811,9 +5809,12 @@ function drawGame() {
       ctx.strokeStyle = '#3a2f52'; ctx.lineWidth = 1; ctx.globalAlpha = alpha * 0.4;
       ctx.beginPath(); ctx.moveTo(px + 16, py + 158); ctx.lineTo(px + pw - 16, py + 158); ctx.stroke();
       ctx.globalAlpha = alpha;
-      btn(px + 20, py + 170, pw - 40, 46, '다음 웨이브  ▶', closeWaveResult, { bg:'#2e1d52', on:true, fs:14, fc:'#c9b8ff' });
+      /* 버튼을 result-bg보다 먼저 BTN에 등록해야 히트 테스트에서 우선됨 */
+      btn(px + 12, py + 166, pw - 24, 56, '다음 웨이브  ▶', closeWaveResult, { bg:'#3a2a6a', bc:'#8a6ad8', on:true, fs:15, fc:'#e4d4ff', label:'_nextWave' });
       ctx.restore();
     }
+    /* 전체 화면 차단은 구체적 버튼 등록 후에 추가해야 가려지지 않음 */
+    BTN.push({ x:0, y:0, w:W, h:H, act:()=>{}, label:'result-bg' });
   }
 
   /* Feature 1: 웨이브 카운트다운 오버레이 (시각 전용) */
@@ -6285,6 +6286,11 @@ function tap(x, y) {
     return;
   }
   /* 승급 이펙트 오버레이 — 최우선 처리 */
+  /* 웨이브 결과 패널 — 다음 웨이브 버튼 최우선 처리 */
+  if (G && G.wResult && G.phase === 'result') {
+    for (const b of BTN) if (b.label === '_nextWave' && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
+    return;
+  }
   if (G && G.promoAnim && !G.promoAnim.done) {
     for (const b of BTN) if (b.label === '_promoClose' && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) { SFX.tap(); b.act(); return; }
     return;
