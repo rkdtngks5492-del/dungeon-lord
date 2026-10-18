@@ -7,6 +7,7 @@ const CUR = {
   gem:  { ico:'◆', col:'#8be9ff', name:'수정' },
   soul: { ico:'◈', col:'#c77dff', name:'영혼석' },
   stam: { ico:'⚡', col:'#ffd35a', name:'행동력' },
+  abyss:{ ico:'💎', col:'#7affff', name:'심연의 결정' },
 };
 
 /* 새로 시작할 때, 그리고 옛 저장(영혼석이 없던 버전)을 처음 불러올 때 주는 영혼석 */

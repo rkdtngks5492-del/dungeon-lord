@@ -50,9 +50,9 @@ const MAIL = [
   { id:'welcome', title:'마왕의 던전에 오신 걸 환영해요!', body:'첫 출정 준비금이에요', reward:{ gems:200 } },
 ];
 
-/* 시즌 패스: 28일 시즌, 30레벨, 일퀘/주퀘 완료마다 경험치 +1 */
+/* 시즌 패스: 30일 시즌, 40레벨, 일퀘/주퀘 완료마다 경험치 +1 */
 const SEASON_PASS = {
-  duration: 28,
+  duration: 30,
   levels: [
     { lv:1,  free:{gems:50},          premium:{gems:100,soul:2} },
     { lv:2,  free:{gems:50},          premium:{gems:100,soul:2} },
@@ -84,6 +84,16 @@ const SEASON_PASS = {
     { lv:28, free:{gems:100},         premium:{gems:200,soul:5} },
     { lv:29, free:{gems:200,soul:5},  premium:{gems:400,soul:10,tickets:1} },
     { lv:30, free:{gems:500,soul:10}, premium:{gems:1000,soul:20,tickets:5}, skin:true },
+    { lv:31, free:{gems:100},          premium:{gems:200,soul:5} },
+    { lv:32, free:{soul:5,cards:[{key:'goblin',n:2}]}, premium:{gems:200,soul:8} },
+    { lv:33, free:{gems:150},          premium:{gems:300,soul:5} },
+    { lv:34, free:{cards:[{key:'imp',n:2}]},  premium:{gems:200,soul:5} },
+    { lv:35, free:{gems:300,soul:10},  premium:{gems:600,soul:20,tickets:2}, skin:true },
+    { lv:36, free:{gems:100},          premium:{gems:200,soul:5} },
+    { lv:37, free:{soul:8,cards:[{key:'skel',n:2}]},  premium:{gems:250,soul:8} },
+    { lv:38, free:{gems:200},          premium:{gems:300,soul:10} },
+    { lv:39, free:{cards:[{key:'ghost',n:2}]}, premium:{gems:200,soul:8,tickets:1} },
+    { lv:40, free:{gems:800,soul:20},  premium:{gems:1500,soul:40,tickets:5}, skin:true },
   ]
 };
 
