@@ -2687,7 +2687,7 @@ function spawnParty(pp) {
   const sc = waveMul();
   /* 역방향: forceAllReverse(레이아웃1)이면 100%, 아니면 35% 확률 */
   const doReverse = LAYOUT && LAYOUT.reverse && (LAYOUT.forceAllReverse ? true : Math.random() < 0.35);
-  const d0 = doReverse ? ROADS[pp.road].dMerge + 20 : Math.max(46, ROADS[pp.road].dFork - ENTRY);
+  const d0 = doReverse ? ROADS[pp.road].dMerge + 20 : 0;
   const P = { road:doReverse ? 3 : pp.road, d:d0, heroes:[], fight:false, live:0, sp:0, dAvg:d0 };
   const order = pp.members.slice().sort((a, b) => FORM[DEF[b.type].role] - FORM[DEF[a.type].role]);
   const cnt = {};
@@ -3573,7 +3573,7 @@ function drawPlates(Q) {
 
 let BTN = [];
 function btn(x, y, w, h, label, act, o) {
-  o = o || {}; BTN.push({ x, y, w, h, act, label });
+  o = o || {}; BTN.push({ x, y, w, h, act, label: o.label || label });
   ctx.fillStyle = o.dis ? '#1e1829' : (o.bg || '#3a2f4d'); rbox(x, y, w, h, 8); ctx.fill();
   ctx.strokeStyle = o.on ? '#ffd35a' : (o.bc || '#5a4a73'); ctx.lineWidth = o.on ? 2 : 1;
   rbox(x, y, w, h, 8); ctx.stroke();
