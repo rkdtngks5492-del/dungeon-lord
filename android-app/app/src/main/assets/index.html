@@ -5743,10 +5743,6 @@ function drawGame() {
     const canDouble = !G.doubled && G.gems > 0;
     const canCont = !G.usedContinue && G.phase === 'lose';
     let by = 452;
-    if (G.phase === 'win' && !G.endless) {
-      btn(36, by - 48, (W-84)/2, 38, '📸 스크린샷', captureScreen, { bg:'#1a2a3a', fs:11 });
-      btn(W/2+6, by - 48, (W-84)/2, 38, '공유하기', shareResult, { bg:'#1a2a3a', fs:11 });
-    }
     if (canCont) {
       btn(40, by, W - 80, 46, '광고 보고 이어하기', continueRun, { bg:'#2b4a3a', on:true, fs:14, sub:'수호석 50% 회복 · 1회만', sc:'#9ae8b5' });
       by += 54;
