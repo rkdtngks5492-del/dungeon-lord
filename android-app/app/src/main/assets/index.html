@@ -2715,7 +2715,8 @@ function spawnParty(pp) {
   const sc = waveMul();
   /* 역방향: forceAllReverse(레이아웃1)이면 100%, 아니면 35% 확률 */
   const doReverse = LAYOUT && LAYOUT.reverse && (LAYOUT.forceAllReverse ? true : Math.random() < 0.35);
-  const d0 = doReverse ? ROADS[pp.road].dMerge + 20 : 0;
+  /* 역방향은 road=3(=ROADS[0]) 위에 스폰 → dMerge는 반드시 ROADS[0] 기준 */
+  const d0 = doReverse ? ROADS[0].dMerge + 20 : 0;
   const P = { road:doReverse ? 3 : pp.road, d:d0, heroes:[], fight:false, live:0, sp:0, dAvg:d0 };
   const order = pp.members.slice().sort((a, b) => FORM[DEF[b.type].role] - FORM[DEF[a.type].role]);
   const cnt = {};
