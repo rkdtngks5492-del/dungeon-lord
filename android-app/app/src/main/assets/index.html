@@ -2465,8 +2465,10 @@ function fireTrap(b) {
     if (P.heroes.some(h => h.boss || h.def.boss) || b.road === 3 || P.d >= ROADS[P.road].dMerge - 20) fxText(b.x, b.z - 10, '버팀', '#c9c9c9');
     else {
       const nr = others[Math.floor(Math.random() * others.length)];
-      P.road = nr; P.d = P.dAvg = Math.min(P.d, ROADS[nr].dMerge - 30);
-      for (const h of P.heroes) { h.road = nr; h.d = Math.max(0, P.d + h.fz); const q = pathPos(nr, h.d); h.x = q[0] + h.fx; h.z = q[1]; h.tgt = null; burst(h.x, 14, h.z, 10, d.col, 70); }
+      /* 새 경로의 d값을 현재 z좌표 기준으로 재계산 — P.d를 그대로 쓰면 경로 길이 차이로 순간이동 발생 */
+      const newD = Math.min(dOfZ(nr, P.heroes.reduce((s, h) => s + h.z, 0) / Math.max(1, P.heroes.length)), ROADS[nr].dMerge - 30);
+      P.road = nr; P.d = P.dAvg = Math.max(0, newD);
+      for (const h of P.heroes) { h.road = nr; h.d = Math.max(0, dOfZ(nr, h.z)); const q = pathPos(nr, h.d); h.x = q[0] + h.fx; h.z = q[1]; h.tgt = null; burst(h.x, 14, h.z, 10, d.col, 70); }
       fxText(b.x, b.z - 10, ROAD_NAME[nr] + '로!', d.col);
     }
   }
