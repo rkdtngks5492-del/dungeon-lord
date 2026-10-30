@@ -26,8 +26,10 @@ const WEEKLY_ALL = { gems:500, soul:30 };   /* 5개 모두 완료 주간 보너�
 /* 출석: 7일 주기, 하루 1번 (연속이 아니어도 됨). 7일차를 받으면 1일차로 돌아간다 */
 const ATTEND = [
   { gems:100 }, { gems:100 }, { gems:150, soul:5 }, { gems:150 },
-  { gems:200, soul:5 }, { gems:200 }, { gems:500, soul:20 },
+  { gems:200, soul:5 }, { gems:200 }, { gems:500, soul:20, legendShard:1 },
 ];
+/* 30일 누적 출석 칭호 */
+const ATTEND_TITLE_30 = '충성스러운 마왕';
 
 /* 일일 상자 (상점): 하루 무료 1회 + 광고 1회. 권속 카드 min~max장, 등급 확률(%) N=일반 R=희귀 SR=영웅 */
 const DAILY_BOX = { min:1, max:3, rates:{ N:70, R:25, SR:5 } };
