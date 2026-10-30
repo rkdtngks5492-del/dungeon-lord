@@ -2101,7 +2101,8 @@ function reset(stage) {
         scd, skc:{}, frenzy:0, seal:0, aim:null, moveFrom:-1, moveCd:0, hs:0, smites:[],
         /* Feature 2 */ lastPlace:null,
         /* Feature 4 */ waveTotal:0, cdown:null,
-        totalKills:0, totalDmgDealt:0, combo:0, comboT:0, redFlashT:0, slowMoT:0, firstClearCelebT:0, newTimeBest:false, comboBonus:0 };
+        totalKills:0, totalDmgDealt:0, combo:0, comboT:0, redFlashT:0, slowMoT:0, firstClearCelebT:0, newTimeBest:false, comboBonus:0,
+        synBuff:{ as:0, atk:0, dr:0, heroSpd:0 }, synActive:[] };
   /* 삼각 분열 레이아웃: 길마다 수호석 */
   if (LAYOUT && LAYOUT.multiStone) {
     const sHp = Math.round(stone * 0.4);
