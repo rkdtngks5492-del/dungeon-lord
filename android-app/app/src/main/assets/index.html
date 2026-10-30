@@ -2083,6 +2083,7 @@ function fovNow() { return FOV + (420 - FOV) * STG.k; }
 
 /* ================= 상태 ================= */
 let scene = 'stages';
+let splashT = 0, splashDone = false;
 const L = { msg:'카드를 눌러 덱을 편성하세요', result:null, pullAnim:null, tab:'minion', info:null, dex:'minion' };
 let M = null;                                   /* 메뉴 위에 뜨는 팝업 { k:'stage'|'stam'|'quest'|'att'|'box'|'mail'|'clear', ... } */
 const TOAST = { msg:'', t:0 };
@@ -3745,8 +3746,26 @@ function rdot(x, y) {
 }
 function menuBg() {
   ctx.fillStyle = UI.bg; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = 'rgba(255,255,255,0.018)';
-  for (let y = 0; y < H; y += 22) for (let x = (y / 22 % 2) * 11; x < W; x += 22) ctx.fillRect(x, y, 21, 21);
+  // Subtle hex grid pattern
+  const hSize = 22, hW = hSize * Math.sqrt(3), hH = hSize * 2;
+  ctx.strokeStyle = 'rgba(168,85,247,0.04)'; ctx.lineWidth = 0.5;
+  for (let row = -1; row < H / (hH * 0.75) + 1; row++) {
+    for (let col = -1; col < W / hW + 2; col++) {
+      const cx2 = col * hW + (row % 2 ? hW / 2 : 0), cy2 = row * hH * 0.75;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) { const a = Math.PI/6 + i*Math.PI/3, x2=cx2+Math.cos(a)*hSize, y2=cy2+Math.sin(a)*hSize; i?ctx.lineTo(x2,y2):ctx.moveTo(x2,y2); }
+      ctx.closePath(); ctx.stroke();
+    }
+  }
+  // Fog at bottom
+  const fog = ctx.createLinearGradient(0, H - 100, 0, H);
+  fog.addColorStop(0, 'rgba(0,0,0,0)');
+  fog.addColorStop(1, 'rgba(10,10,26,0.6)');
+  ctx.fillStyle = fog; ctx.fillRect(0, H - 100, W, 100);
+  // Ambient glow top-left
+  const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, 200);
+  glow.addColorStop(0, 'rgba(124,58,237,0.06)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
 }
 /* 화면 제목 줄 (상단 바 바로 아래) + 소리 버튼 */
 function menuTitle(t) {
@@ -3776,7 +3795,11 @@ function claimBtns(x1, y, r, mark, h) {
 }
 function pill(x, y, w, ico, col, val, act, label) {
   ctx.fillStyle = 'rgba(255,255,255,0.06)'; rbox(x, y, w, 22, 11); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; rbox(x, y, w, 22, 11); ctx.stroke();
+  ctx.save();
+  if (col === UI.soul) { ctx.shadowColor = UI.soul; ctx.shadowBlur = 4; }
+  else if (col === UI.cyan) { ctx.shadowColor = UI.cyan; ctx.shadowBlur = 3; }
+  ctx.strokeStyle = col !== UI.txtPri ? col + '66' : 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; rbox(x, y, w, 22, 11); ctx.stroke();
+  ctx.restore();
   txt(ico, x + 12, y + 11, 13, col, 'center');
   txt(val, x + 24, y + 11, 12, col);
   if (act) BTN.push({ x, y, w, h:22, act, label });
@@ -3857,7 +3880,28 @@ function ownedList(isM) {
 function unitTile(k, x, y, w, h, inT) {
   const d = DEF[k], own = !!SAVE.own[k], col = RAR_COL[d.rar], isM = d.kind === 'minion';
   ctx.fillStyle = own ? '#271f38' : '#1a1524'; rbox(x, y, w, h, 7); ctx.fill();
-  ctx.strokeStyle = inT ? UI.gold2 : col; ctx.lineWidth = inT ? 2.2 : 1.2; rbox(x, y, w, h, 7); ctx.stroke();
+  // Rarity glow shadow
+  if (own && !inT) {
+    ctx.save();
+    if (d.rar === 'SSR') { ctx.shadowColor = UI.gold1; ctx.shadowBlur = 10 + Math.sin(T*2)*4; }
+    else if (d.rar === 'SR') { ctx.shadowColor = UI.soul; ctx.shadowBlur = 6 + Math.sin(T*3)*2; }
+    else if (d.rar === 'R') { ctx.shadowColor = '#3b82f6'; ctx.shadowBlur = 4; }
+    ctx.strokeStyle = col; ctx.lineWidth = d.rar === 'SSR' ? 2 : d.rar === 'SR' ? 1.8 : 1.2;
+    rbox(x, y, w, h, 7); ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.strokeStyle = inT ? UI.gold2 : col; ctx.lineWidth = inT ? 2.2 : 1.2; rbox(x, y, w, h, 7); ctx.stroke();
+  }
+  // SSR shine effect
+  if (own && d.rar === 'SSR') {
+    const shine = (T * 0.8) % 2;
+    if (shine < 1) {
+      ctx.save(); ctx.globalAlpha = 0.2 * (shine < 0.5 ? shine*2 : (1-shine)*2);
+      const sg = ctx.createLinearGradient(x, y, x+w, y+h);
+      sg.addColorStop(0, 'rgba(255,255,255,0)'); sg.addColorStop(0.5, 'rgba(255,220,100,0.8)'); sg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sg; rbox(x, y, w, h, 7); ctx.fill(); ctx.restore();
+    }
+  }
   ctx.globalAlpha = own ? 1 : 0.18;
   const im = unitImg(k);
   if (im) fitImg(ctx, im, x + w / 2, y + h - (h > 50 ? 15 : 4), w - 6, h - (h > 50 ? 26 : 14)); else ctx.drawImage(thumb(k), x + w / 2 - 15, y + 8, 30, 30);
@@ -4422,7 +4466,10 @@ function drawShop() {
     PULL_RATES.forEach(([nm, pc, r], i) => {
       const x = 12 + i * ((W - 24) / 4), w = (W - 24) / 4 - 6;
       ctx.fillStyle = 'rgba(255,255,255,0.04)'; rbox(x, 382, w, 46, 8); ctx.fill();
-      ctx.strokeStyle = RAR_COL[r]; ctx.lineWidth = 1.2; rbox(x, 382, w, 46, 8); ctx.stroke();
+      ctx.save();
+      if (r === 'SSR') { ctx.shadowColor = UI.gold1; ctx.shadowBlur = 6; }
+      else if (r === 'SR') { ctx.shadowColor = UI.soul; ctx.shadowBlur = 4; }
+      ctx.strokeStyle = RAR_COL[r]; ctx.lineWidth = 1.2; rbox(x, 382, w, 46, 8); ctx.stroke(); ctx.restore();
       txt(nm, x + w / 2, 396, 11, RAR_COL[r], 'center'); txt(pc + '%', x + w / 2, 416, 14, '#fff', 'center');
     });
     txt('×10과 카드팩은 마지막 장이 희귀 이상', W / 2, 442, 9, UI.txtDim, 'center');
@@ -4455,7 +4502,12 @@ function drawShop() {
     sec(416, '패키지');
     /* 스타터 팩 */
     ctx.fillStyle = SAVE.hadStarter ? '#1c2a22' : '#1e2a3a'; rbox(12, 428, 160, 60, 10); ctx.fill();
-    ctx.strokeStyle = SAVE.hadStarter ? '#4e8a66' : UI.gold2; ctx.lineWidth = 1.5; rbox(12, 428, 160, 60, 10); ctx.stroke();
+    if (!SAVE.hadStarter) {
+      ctx.save(); ctx.shadowColor = UI.gold1; ctx.shadowBlur = 6 + Math.sin(T*2)*4;
+      ctx.strokeStyle = UI.gold2; ctx.lineWidth = 1.5; rbox(12, 428, 160, 60, 10); ctx.stroke(); ctx.restore();
+    } else {
+      ctx.strokeStyle = '#4e8a66'; ctx.lineWidth = 1.5; rbox(12, 428, 160, 60, 10); ctx.stroke();
+    }
     txt('🌟 스타터 팩', 22, 446, 12, UI.gold2);
     txt(CUR.gem.ico + '300 + ' + CUR.soul.ico + '50', 22, 462, 10, UI.txtSec);
     txt('1회 구매', 22, 478, 8, UI.txtDim);
@@ -4463,7 +4515,12 @@ function drawShop() {
     else btn(100, 438, 64, 36, STARTER_PACK.price, () => BILLING.buy(STARTER_PACK.id), { bg:'#3a3220', bc:UI.gold2, fs:11 });
     /* 마왕 패스 */
     ctx.fillStyle = SAVE.lordPass ? '#1c2a22' : '#1a1a2e'; rbox(184, 428, W - 196, 60, 10); ctx.fill();
-    ctx.strokeStyle = SAVE.lordPass ? '#4e8a66' : UI.soul; ctx.lineWidth = 1.5; rbox(184, 428, W - 196, 60, 10); ctx.stroke();
+    if (!SAVE.lordPass) {
+      ctx.save(); ctx.shadowColor = UI.soul; ctx.shadowBlur = 8 + Math.sin(T*2.5)*5;
+      ctx.strokeStyle = UI.soul; ctx.lineWidth = 1.5; rbox(184, 428, W - 196, 60, 10); ctx.stroke(); ctx.restore();
+    } else {
+      ctx.strokeStyle = '#4e8a66'; ctx.lineWidth = 1.5; rbox(184, 428, W - 196, 60, 10); ctx.stroke();
+    }
     txt('👑 마왕 패스', 196, 446, 12, UI.soul);
     txt('매일 ' + CUR.gem.ico + LORD_PASS.dailyGems + ' + ' + CUR.soul.ico + LORD_PASS.dailySoul, 196, 462, 10, UI.txtSec);
     txt('광고 제거 포함', 196, 478, 8, UI.txtDim);
@@ -4586,7 +4643,9 @@ function drawCodex() {
   const tab = L.dex, C = CODEX[tab], N = C.keys.length, n = dexFound(tab), pct = Math.floor(n / N * 100);
   txt(C.name + ' 도감', 14, 98, 12, '#ffe9a8');
   txt(n + '/' + N + '  (' + pct + '%)', W - 14, 98, 12, UI.gold2, 'right');
-  bar2(14, 107, W - 28, 5, ADMIN_MODE ? 1 : n / N, ADMIN_MODE ? UI.gold2 : UI.gold2);
+  const dexPct = n / N;
+  const dexCol = dexPct >= 1 ? UI.gold2 : dexPct >= 0.75 ? UI.soul : dexPct >= 0.5 ? '#3b82f6' : '#94a3b8';
+  bar2(14, 107, W - 28, 5, ADMIN_MODE ? 1 : dexPct, ADMIN_MODE ? UI.gold2 : dexCol);
   if (ADMIN_MODE) {
     ctx.fillStyle = 'rgba(255,211,90,.13)'; ctx.fillRect(0, 112, W, 16);
     txt('🔓 관리자 모드 — 도감 전체 개방 (게임 데이터 미변경)', W / 2, 120, 9, UI.gold2, 'center');
@@ -4639,6 +4698,7 @@ function drawCodex() {
         txt('힌트', x + cw / 2, y + 52, 7, UI.gold2, 'center');
         txt(DEF[k].unlock + '관문', x + cw / 2, y + 62, 7, UI.txtSec, 'center');
       } else {
+        txt('?', x + cw / 2, y + 36, 22, 'rgba(107,90,133,0.6)', 'center');
         txt('미발견', x + cw / 2, y + 64, 10, '#6b5a85', 'center');
       }
     }
@@ -5289,7 +5349,7 @@ function stageCard(c, x, live) {
   /* 시작 버튼 / 잠김 */
   const st = stamNow(), by2 = y0 + h - 54;
   if (open) B(L, by2, 92, 44, '✨ 추천 덱', () => { M = { k:'rec', i }; }, { bg:'rgba(124,58,237,0.20)', fs:12, sub:'보유 카드로', sc:UI.txtSec });
-  if (open) B(L + 98, by2, CARD_W - 32 - 98, 44, '출정하기', () => startBattle(i), { bg:'#5d2f3f', on:true, fs:16,
+  if (open) B(L + 98, by2, CARD_W - 32 - 98, 44, '🏰 출정하기', () => startBattle(i), { bg:'#5d2f3f', on:true, fs:16,
       sub:CUR.stam.ico + ' ' + STAM.cost + ' 소모   (보유 ' + st + ')', sc:st < STAM.cost ? '#ff8a8a' : CUR.stam.col });
   else {
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; rbox(x, y0, CARD_W, h, 14); ctx.fill();
@@ -5758,7 +5818,7 @@ function drawGame() {
   const S = curStage();
   txt(G.endless ? '∞ 무한의 문' : '제' + S.no + '관문 · ' + S.name, 10, 12, 12, UI.txtPri);
   txt((G.endless ? ((G.wIdx + 1) % 10 === 0 && G.phase === 'run' ? '👑 ' : '') + (G.wIdx + 1) + '층' + (SAVE.endlessBest ? '  (최고 ' + SAVE.endlessBest + '층)' : '')
-                : '웨이브 ' + (G.wIdx + 1) + '/' + waveCount()) + '   ◆ +' + G.gems, 10, 28, 11, UI.cyan);
+                : '🔥 웨이브 ' + (G.wIdx + 1) + '/' + waveCount()) + '   ◆ +' + G.gems, 10, 28, 11, UI.cyan);
   /* Feature 4: 남은 적 수 표시 */
   if (G.phase === 'run' && G.waveTotal > 0) {
     const alive = G.heroes.length + (G.pending ? G.pending.reduce((a, p) => a + p.members.length, 0) : 0);
@@ -5769,7 +5829,11 @@ function drawGame() {
     G.stones.forEach((s, r) => { bar2(196 + r * 46, 8, 40, 9, s.hp / s.maxHp, s.hp > 0 ? UI.accent1 : '#333'); });
     txt(G.stones.filter(s => s.hp > 0).length + '/3', 320, 12, 10, UI.soul, 'right');
   } else {
-    txt('수호석', 180, 12, 10, UI.soul); bar2(216, 8, 100, 9, G.stone / G.maxStone, UI.accent1);
+    txt('수호석', 180, 12, 10, UI.soul);
+    const stoneRatio = G.stone / G.maxStone;
+    const stoneCol = stoneRatio > 0.5 ? '#10b981' : stoneRatio > 0.25 ? '#f59e0b' : '#ef4444';
+    bar2(216, 8, 100, 9, stoneRatio, stoneCol);
+    if (stoneRatio < 0.3) { ctx.save(); ctx.globalAlpha = 0.4 + Math.sin(T*4)*0.3; ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1.5; rbox(216,8,100,9,4); ctx.stroke(); ctx.restore(); }
     txt(Math.ceil(G.stone) + ' / ' + G.maxStone, 316, 28, 10, UI.soul, 'right');
   }
   if (G.phase === 'run' || G.phase === 'prep') btn(W - 36, 4, 30, 30, '⏸', pauseGame, { bg:'rgba(40,32,60,.9)', fs:14 });
@@ -5883,7 +5947,7 @@ function drawGame() {
   });
   const cy = sy + 42;
   if (G.phase === 'run') btn(sx, cy, sw, 36, G.adBuff ? '소환 완료' : '🎬 긴급 소환', adSummon, { dis:!!G.adBuff || !downed().length, bg:'#2b3f5a', fs:11, sub:G.adBuff ? '관문당 1번' : '쓰러진 ' + downed().length + '명 부활', sc:'#9ac8ff' });
-  else btn(sx, cy, sw, 36, '웨이브 시작', startWave, { dis:G.phase !== 'prep', bg:'#5d2f3f', fs:12 });
+  else btn(sx, cy, sw, 36, '⚔️ 웨이브 시작', startWave, { dis:G.phase !== 'prep', bg:'#5d2f3f', fs:12 });
   const mv = G.sel >= 0 && G.rooms[G.sel] && (G.phase === 'prep' || G.moveCd <= 0);
   btn(sx + sw + sg, cy, sw, 36, G.moveCd > 0 && G.phase === 'run' ? '재배치 ' + Math.ceil(G.moveCd) : '재배치', startMove, { dis:!mv, bg:'#2b4a3a', fs:12, on:G.moveFrom >= 0 });
   btn(sx + (sw + sg) * 2, cy, sw, 36, '회수', pickUp, { dis:G.sel < 0 || !G.rooms[G.sel] || G.phase !== 'prep', fs:12 });
@@ -5923,9 +5987,19 @@ function drawGame() {
         const clrLabel = G.stars===3 ? 'PERFECT!' : 'CLEAR!';
         const clrAlpha = A ? Math.min(1, A.t/0.4) : 1;
         const clrScale = A ? 1 + Math.max(0, 0.5 - A.t)*0.8 : 1;
-        const clrCol = G.stars===3 ? UI.gold2 : UI.green;
         ctx.save(); ctx.globalAlpha=clrAlpha; ctx.translate(W/2,170); ctx.scale(clrScale,clrScale); ctx.translate(-W/2,-170);
-        txt(clrLabel, W/2, 170, 30, clrCol, 'center'); ctx.restore();
+        if (G.stars===3) {
+          // Rainbow gradient text for PERFECT!
+          const rg = ctx.createLinearGradient(W/2-70, 0, W/2+70, 0);
+          rg.addColorStop(0, '#f59e0b'); rg.addColorStop(0.25, '#a855f7');
+          rg.addColorStop(0.5, '#06b6d4'); rg.addColorStop(0.75, '#10b981'); rg.addColorStop(1, '#f59e0b');
+          ctx.font = 'bold 30px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.save(); ctx.shadowColor = UI.gold2; ctx.shadowBlur = 16;
+          ctx.fillStyle = rg; ctx.fillText(clrLabel, W/2, 170); ctx.restore();
+        } else {
+          txt(clrLabel, W/2, 170, 30, UI.green, 'center');
+        }
+        ctx.restore();
         /* 별 순차 애니메이션 */
         const sDelay=0.3, sInt=0.22;
         for (let i=0; i<3; i++) {
@@ -6144,8 +6218,58 @@ window.onBack = function () {
 window.onAppPause = function () { if (!ADV.wait) { pauseGame(); cpSave(); } };
 document.addEventListener('visibilitychange', () => { if (document.hidden && !ADV.wait) { pauseGame(); cpSave(); } });
 
+function drawSplash() {
+  if (splashT > 2.8 && Math.min(1, splashT / 2.5) >= 1) splashDone = true;
+  ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  // Hexagonal magic circle background
+  const cx = W/2, cy = H/2 - 40, r = 90;
+  const pulse = 0.6 + Math.sin(T * 2) * 0.4;
+  const redPurpleGrad = ctx.createRadialGradient(cx, cy, 10, cx, cy, r);
+  redPurpleGrad.addColorStop(0, 'rgba(168,85,247,0.3)');
+  redPurpleGrad.addColorStop(0.5, 'rgba(220,38,38,0.15)');
+  redPurpleGrad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = redPurpleGrad; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+  // Draw hexagon magic circle
+  for (let ring = 0; ring < 3; ring++) {
+    const rr = 30 + ring * 26, rot = T * (ring % 2 === 0 ? 0.4 : -0.3) + ring * 0.5;
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(rot);
+    ctx.strokeStyle = ring === 0 ? 'rgba(168,85,247,' + (0.5*pulse) + ')' : ring === 1 ? 'rgba(220,38,38,' + (0.4*pulse) + ')' : 'rgba(168,85,247,' + (0.3*pulse) + ')';
+    ctx.lineWidth = ring === 0 ? 2 : 1;
+    ctx.beginPath();
+    for (let i = 0; i <= 6; i++) { const a = i/6*Math.PI*2, x2=Math.cos(a)*rr, y2=Math.sin(a)*rr; i ? ctx.lineTo(x2,y2) : ctx.moveTo(x2,y2); }
+    ctx.closePath(); ctx.stroke();
+    // Rune marks at vertices
+    for (let i = 0; i < 6; i++) { const a = i/6*Math.PI*2; ctx.fillStyle = 'rgba(168,85,247,' + (0.6*pulse) + ')'; ctx.beginPath(); ctx.arc(Math.cos(a)*rr, Math.sin(a)*rr, 2.5, 0, Math.PI*2); ctx.fill(); }
+    ctx.restore();
+  }
+  // Title with typewriter effect
+  const titleFull = '마왕의 던전';
+  const charCount = Math.min(titleFull.length, Math.floor(splashT * 3.5));
+  const title = titleFull.slice(0, charCount);
+  ctx.save();
+  ctx.shadowColor = 'rgba(168,85,247,0.9)'; ctx.shadowBlur = 20;
+  txt(title + (splashT < 2 && charCount < titleFull.length ? '|' : ''), cx, cy + r + 36, 28, '#e4d4ff', 'center');
+  ctx.restore();
+  txt('DUNGEON LORD', cx, cy + r + 64, 11, 'rgba(168,85,247,0.7)', 'center');
+  // Loading bar (flame style)
+  const prog = Math.min(1, splashT / 2.5);
+  const bx = 60, by = cy + r + 86, bw = W - 120, bh = 6;
+  ctx.fillStyle = 'rgba(255,255,255,0.08)'; rbox(bx, by, bw, bh, 3); ctx.fill();
+  if (prog > 0) {
+    const fg = ctx.createLinearGradient(bx, by, bx + bw*prog, by);
+    fg.addColorStop(0, '#991b1b'); fg.addColorStop(0.6, '#dc2626'); fg.addColorStop(1, '#f97316');
+    ctx.fillStyle = fg; rbox(bx, by, bw*prog, bh, 3); ctx.fill();
+    // Flame tip glow
+    ctx.save(); ctx.shadowColor = '#f97316'; ctx.shadowBlur = 8;
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(bx + bw*prog, by + bh/2, 3, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  txt(prog < 1 ? '불러오는 중...' : '화면을 눌러 시작', cx, by + 22, 10, 'rgba(168,85,247,0.8)', 'center');
+}
+
 function draw() {
   tutTick(); fttTick();   /* 단계 진입 준비를 먼저 해야 그 프레임에 가리킬 버튼이 그려진다 */
+  if (!splashDone) { splashT += 1/60; drawSplash(); return; }
   scene === 'game' ? drawGame() : drawMenu();
   if (scene === 'game' && G.paused) drawPause();
   if (scene === 'game' && M) drawModal();
@@ -6211,13 +6335,13 @@ const TUT = [
     T:() => rectOf(findBtn(M && M.k === 'unit' ? '편성하기' : scene === 'lobby' ? '카드:' + SAVE.tut.newKey : '탭:덱')), done:() => !SAVE.tut.newKey || SAVE.mteam.indexOf(SAVE.tut.newKey) >= 0 },
   { id:'toBattle', say:['좋다. 위쪽 편성 칸에 들어갔다.', '「전투」 탭으로 가자.'], enter:() => { M = null; }, T:() => rectOf(findBtn('탭:전투')), done:() => scene === 'stages' },
   { id:'start', say:['제1관문이다. 「출정하기」를 눌러라.'], enter:() => { goCard(0); SS.pos = 0; SS.dx = 0; },
-    T:() => rectOf(findBtn(scene === 'stages' ? '출정하기' : '탭:전투')), done:() => scene === 'game' && G.stage === 0 },
+    T:() => rectOf(findBtn(scene === 'stages' ? '🏰 출정하기' : '탭:전투')), done:() => scene === 'game' && G.stage === 0 },
   { id:'roads', battle:true, info:true, say:['침입자는 위쪽 입구에서 A·B·C 세 길로 내려온다.', '붉은 점선이 방어 라인. 권속은 그 너머로 나가지 않는다.'], T:mapRect },
   { id:'room', battle:true, say:['B길 첫 거점(B1)의 빈 칸을 눌러라.'], T:() => roomRect(tutRoom()), done:() => G.sel === tutRoom() || !!G.rooms[tutRoom()] },
   { id:'card', battle:true, say:['아래 권속 카드를 눌러 그 칸에 세워라.'], enter:() => { G.sel = tutRoom(); }, T:() => handCard(SAVE.mteam), done:() => !!G.rooms[tutRoom()] },
   { id:'trapRoom', battle:true, say:['길 위의 붉은 칸은 함정 전용 칸이다. 눌러라.'], T:() => roomRect(tutTrapRoom()), done:() => G.sel === tutTrapRoom() || !!G.rooms[tutTrapRoom()] },
   { id:'trapCard', battle:true, say:['함정 카드를 눌러 설치해라.', '침입자가 밟으면 터진다.'], enter:() => { G.sel = tutTrapRoom(); }, T:() => handCard(SAVE.tteam), done:() => !!G.rooms[tutTrapRoom()] },
-  { id:'wave', battle:true, say:['남은 카드는 「배치 추천」으로 대신 세워 두었다.', '준비되면 「웨이브 시작」을 눌러라!'], enter:() => { autoDeploy('hybrid', true); }, T:() => rectOf(findBtn('웨이브 시작')), done:() => G.phase !== 'prep' },
+  { id:'wave', battle:true, say:['남은 카드는 「배치 추천」으로 대신 세워 두었다.', '준비되면 「웨이브 시작」을 눌러라!'], enter:() => { autoDeploy('hybrid', true); }, T:() => rectOf(findBtn('⚔️ 웨이브 시작')), done:() => G.phase !== 'prep' },
   { id:'auto', battle:true, info:true, say:['권속은 침입자가 다가오면 알아서 싸운다.', '나는 마법 네 가지로 거들 수 있지. 하나씩 써 보자.'] },
   { id:'roar', battle:true, say:['「포효」: 모든 침입자에게 피해를 주고 기절시킨다.'], T:() => rectOf(findBtn('포효')), done:() => G.scd.roar > 0 },
   { id:'meteor', battle:true, say:['「운석」: 누른 다음, 떨어뜨릴 곳을 맵에서 눌러라.'], T:() => (G.aim ? mapRect() : rectOf(findBtn('운석'))), done:() => G.scd.meteor > 0 },
@@ -6316,7 +6440,7 @@ function drawFtt() {
   let r = null;
   if (s === 0) { const i = fttFreeSlot(); r = i >= 0 ? roomRect(i) : null; }
   else if (s === 1) { r = handCard(SAVE.mteam); }
-  else if (s === 2) { r = rectOf(findBtn('웨이브 시작')); }
+  else if (s === 2) { r = rectOf(findBtn('⚔️ 웨이브 시작')); }
   FTT_TGT_R = r;
   const SAYS = [
     '맵의 빈 배치 칸을 선택하세요',
@@ -6521,6 +6645,7 @@ function unproject(sx, sy) {
   return [cam.tx + vx * cy1 - z1 * sy1, cam.tz + vx * sy1 + z1 * cy1];
 }
 function tap(x, y) {
+  if (!splashDone) { if (splashT > 0.5) splashDone = true; return; }
   if (!ADV.on && tutTap(x, y)) return;   /* 튜토리얼: 안내한 곳 말고는 눌러도 반응 없음 */
   if (!ADV.on && fttTap(x, y)) return;  /* FTT: 안내 영역 밖 터치 차단 */
   if (ADV.on) {
@@ -7271,7 +7396,8 @@ function drawGuild() {
     btn(12 + i * 114, 56, 110, 26, t[1], function() { L.guildTab = t[0]; L.guildY = 0; }, { on:L.guildTab === t[0], bg:L.guildTab === t[0] ? 'rgba(124,58,237,0.20)' : 'rgba(255,255,255,0.04)', fs:12 });
   });
   ctx.fillStyle = '#1a1228'; rbox(12, 88, W - 24, 34, 6); ctx.fill();
-  txt('🏰 ' + g.name, 24, 108, 12, '#fff');
+  ctx.save(); ctx.shadowColor = UI.soul; ctx.shadowBlur = 4;
+  txt('🔥 ' + g.name, 24, 108, 12, '#fff'); ctx.restore();
   txt('기여도 ' + (g.contribution || 0), W / 2, 108, 11, UI.gold2, 'center');
   btn(W - 76, 90, 62, 30, '탈퇴', function() { M = { k:'guildLeave' }; }, { bg:'#3a1818', bc:'#8a3a3a', fs:10, fc:'#ff8a8a' });
   const TOP = 128, BOT = NAV_Y - 4;
@@ -7289,7 +7415,7 @@ function drawGuild() {
       const y = listTop + i * rh - L.guildY;
       if (y + rh < listTop || y > BOT) return;
       ctx.fillStyle = m.isMe ? '#241a38' : (i % 2 ? 'rgba(255,255,255,0.04)' : UI.card); ctx.fillRect(12, y, W - 24, rh - 2);
-      const ri = m.role === 'master' ? '👑' : m.role === 'officer' ? '⚔️' : '';
+      const ri = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : (m.role === 'master' ? '👑' : m.role === 'officer' ? '⚔️' : '');
       txt(ri + m.name, 22, y + 16, 11, m.isMe ? UI.gold2 : '#fff');
       txt(['일반','부관','마스터'][['member','officer','master'].indexOf(m.role)] || '', 22, y + 30, 8, UI.border);
       txt(String(m.contribution), W / 2, y + 20, 11, '#c9a8ff', 'center');
@@ -7334,7 +7460,11 @@ function drawGuild() {
     txt('길드 레이드', W / 2, TOP + 198, 13, '#ff9a6a', 'center');
     txt('보스: 혼돈의 거인  HP 1,000,000', W / 2, TOP + 216, 10, UI.txtSec, 'center');
     ctx.fillStyle = '#2a1018'; rbox(28, TOP + 222, W - 56, 18, 5); ctx.fill();
-    ctx.fillStyle = raidDead ? UI.green : '#c84a6a'; rbox(28, TOP + 222, (W - 56) * raidPct, 18, 5); ctx.fill();
+    if (raidTotal > 0) {
+      const rg = ctx.createLinearGradient(28, TOP+222, 28+(W-56)*raidPct, TOP+222);
+      rg.addColorStop(0, raidDead ? '#10b981' : '#7f1d1d'); rg.addColorStop(1, raidDead ? UI.green : '#dc2626');
+      ctx.fillStyle = rg; rbox(28, TOP + 222, (W - 56) * raidPct, 18, 5); ctx.fill();
+    }
     txt(raidDead ? '처치 완료!' : Math.floor(raidPct * 100) + '% 진행', W / 2, TOP + 234, 10, '#fff', 'center');
     txt('내 피해: ' + (raid.myDmg ? (raid.myDmg / 10000).toFixed(1) + '만' : '-'), 34, TOP + 252, 10, '#ff9a6a');
     txt('길드원 피해: ' + Math.floor((raid.aiDmg || 0) / 10000) + '만', W / 2 + 10, TOP + 252, 10, UI.txtSec);
@@ -7348,7 +7478,7 @@ function drawGuild() {
       txt('이번 주 공격 완료', W / 2, TOP + 278, 11, UI.txtDim, 'center');
       txt('다음 주 월요일에 초기화돼요', W / 2, TOP + 294, 9, UI.border, 'center');
     } else {
-      btn(W / 2 - 74, TOP + 262, 148, 38, '⚔️ 레이드 공격  ⚡-3', function() {
+      btn(W / 2 - 74, TOP + 262, 148, 38, '💀 레이드 공격  ⚡-3', function() {
         if (stamNow() < 3) { toast('행동력이 부족해요'); return; }
         SAVE.stam -= 3;
         const deckPow = SAVE.mteam.length * 25000;
