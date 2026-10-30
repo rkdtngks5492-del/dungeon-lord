@@ -2101,7 +2101,7 @@ function reset(stage) {
         scd, skc:{}, frenzy:0, seal:0, aim:null, moveFrom:-1, moveCd:0, hs:0, smites:[],
         /* Feature 2 */ lastPlace:null,
         /* Feature 4 */ waveTotal:0, cdown:null,
-        totalKills:0, totalDmgDealt:0, combo:0, comboT:0 };
+        totalKills:0, totalDmgDealt:0, combo:0, comboT:0, redFlashT:0, slowMoT:0, firstClearCelebT:0, newTimeBest:false, comboBonus:0 };
   /* 삼각 분열 레이아웃: 길마다 수호석 */
   if (LAYOUT && LAYOUT.multiStone) {
     const sHp = Math.round(stone * 0.4);
@@ -2379,6 +2379,8 @@ function finishBattle() {
       const sp = todaySpecial();
       if (sp.id === 'sc_stone' && r >= 1) claimSpecial();
       else if (sp.id === 'sc_notrap' && !SAVE.tteam.some(k => G.rooms.some(b => b && b.key === k))) claimSpecial();
+      else if (sp.id === 'sc_speed' && G.clearTime <= 30) claimSpecial();
+      else if (sp.id === 'sc_wave3' && (SAVE.clearCount || 0) % 3 === 0) claimSpecial();
     }
     rankRecordStage(G.stage, r * 100);
     questAdd('clear'); questAdd('w_clear');
@@ -3361,7 +3363,7 @@ function update(dt) {
     G.wKills = (G.wKills||0) + 1;
     G.totalKills = (G.totalKills||0) + 1;
     G.combo = (G.combo||0) + 1; G.comboT = 2.5;
-    if (G.combo === 5) { fxText(h.x, h.z, '격멸!', UI.red); SFX.die && SFX.die(); }
+    if (G.combo === 5) { fxText(h.x, h.z, '격멸!', UI.red); SFX.die && SFX.die(); if (!specialDone() && todaySpecial().id === 'sc_nokill') claimSpecial(); }
     else if (G.combo === 10) { fxText(h.x, h.z, '압도!', UI.gold2); SAVE.soul = (SAVE.soul||0) + 1; persist(); G.comboBonus = (G.comboBonus||0) + 1; }
     else if (G.combo === 20) { fxText(h.x, h.z, '전멸!', UI.red); G.redFlashT = 0.4; }
     if (h.lastHitBy) h.lastHitBy.wKills = (h.lastHitBy.wKills||0) + 1;
