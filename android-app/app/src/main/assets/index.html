@@ -1905,6 +1905,38 @@ ART_IMG['card_SSR']     = 'images/ui/card_SSR.png';
 ART_IMG['card_unknown'] = 'images/ui/card_unknown.png';
 ART_IMG['guild_emblem'] = 'images/ui/guild_emblem.png';
 ART_IMG['boss_chaos']   = 'images/ui/boss_chaos.png';
+/* 뱃지 */
+ART_IMG['badge_N']      = 'images/badge_normal.png';
+ART_IMG['badge_R']      = 'images/badge_rare.png';
+ART_IMG['badge_SR']     = 'images/badge_epic.png';
+ART_IMG['badge_SSR']    = 'images/badge_legend.png';
+/* 상점 배너 */
+ART_IMG['shop_starter'] = 'images/shop_banner_starter.png';
+ART_IMG['shop_pass']    = 'images/shop_banner_demon_pass.png';
+ART_IMG['shop_noads']   = 'images/shop_banner_ad_remove.png';
+/* 순위 메달 */
+ART_IMG['rank_1']       = 'images/rank_1st.png';
+ART_IMG['rank_2']       = 'images/rank_2nd.png';
+ART_IMG['rank_3']       = 'images/rank_3rd.png';
+/* 길드 UI */
+ART_IMG['guild_crown']  = 'images/guild_master_crown.png';
+ART_IMG['guild_rank_bg']= 'images/guild_rank_card_bg.png';
+/* 전투 배경 */
+ART_IMG['battle_bg_forest'] = 'images/battle_bg_forest.png';
+ART_IMG['battle_bg_dungeon']= 'images/battle_bg_dungeon.png';
+ART_IMG['battle_bg_abyss']  = 'images/battle_bg_abyss.png';
+/* 전투 UI */
+ART_IMG['crystal_heart']    = 'images/crystal_heart.png';
+ART_IMG['wave_banner']      = 'images/wave_banner.png';
+ART_IMG['wave_done']        = 'images/wave_complete_banner.png';
+ART_IMG['defense_line']     = 'images/defense_line_icon.png';
+ART_IMG['ability_bg']       = 'images/ability_panel_bg.png';
+ART_IMG['star_frame']       = 'images/star_reward_frame.png';
+/* 스킬 아이콘 */
+ART_IMG['skill_roar']   = 'images/skill_roar.png';
+ART_IMG['skill_meteor'] = 'images/skill_meteor.png';
+ART_IMG['skill_frenzy'] = 'images/skill_frenzy.png';
+ART_IMG['skill_seal']   = 'images/skill_seal.png';
 
 /* ================= 효과음 (Web Audio 합성, 음원 파일 없음) ================= */
 const SFX = (() => {
@@ -3928,6 +3960,8 @@ function unitTile(k, x, y, w, h, inT) {
     } else {
       const fIm = unitImg('card_' + d.rar);
       if (fIm) ctx.drawImage(fIm, x, y, w, h);
+      const bIm = unitImg('badge_' + d.rar);
+      if (bIm) ctx.drawImage(bIm, x + w - 18, y + 2, 16, 16);
     }
   }
   if (h <= 50) { if (own && isM) txt('Lv' + lvOf(k), x + w / 2, y + 7, 7, UI.txtSec, 'center'); return; }
@@ -4526,6 +4560,7 @@ function drawShop() {
     sec(416, '패키지');
     /* 스타터 팩 */
     ctx.fillStyle = SAVE.hadStarter ? '#1c2a22' : '#1e2a3a'; rbox(12, 428, 160, 60, 10); ctx.fill();
+    { const sbIm = unitImg('shop_starter'); if (sbIm) { ctx.save(); rbox(12, 428, 160, 60, 10); ctx.clip(); ctx.globalAlpha = 0.35; ctx.drawImage(sbIm, 12, 428, 160, 60); ctx.restore(); } }
     if (!SAVE.hadStarter) {
       ctx.save(); ctx.shadowColor = UI.gold1; ctx.shadowBlur = 6 + Math.sin(T*2)*4;
       ctx.strokeStyle = UI.gold2; ctx.lineWidth = 1.5; rbox(12, 428, 160, 60, 10); ctx.stroke(); ctx.restore();
@@ -4539,6 +4574,7 @@ function drawShop() {
     else btn(100, 438, 64, 36, STARTER_PACK.price, () => BILLING.buy(STARTER_PACK.id), { bg:'#3a3220', bc:UI.gold2, fs:11 });
     /* 마왕 패스 */
     ctx.fillStyle = SAVE.lordPass ? '#1c2a22' : '#1a1a2e'; rbox(184, 428, W - 196, 60, 10); ctx.fill();
+    { const spIm = unitImg('shop_pass'); if (spIm) { ctx.save(); rbox(184, 428, W - 196, 60, 10); ctx.clip(); ctx.globalAlpha = 0.35; ctx.drawImage(spIm, 184, 428, W - 196, 60); ctx.restore(); } }
     if (!SAVE.lordPass) {
       ctx.save(); ctx.shadowColor = UI.soul; ctx.shadowBlur = 8 + Math.sin(T*2.5)*5;
       ctx.strokeStyle = UI.soul; ctx.lineWidth = 1.5; rbox(184, 428, W - 196, 60, 10); ctx.stroke(); ctx.restore();
@@ -4867,7 +4903,7 @@ function drawPvp() {
   const row = (r, y, hi) => {
     const p = rankParts(r.score), md = r.rank <= 3;
     ctx.fillStyle = hi ? 'rgba(124,58,237,0.20)' : r.rank % 2 ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.02)'; ctx.fillRect(12, y, W - 24, rh - 2);
-    if (md) { ctx.fillStyle = MEDAL[r.rank - 1]; ctx.beginPath(); ctx.arc(30, y + 12, 9, 0, 7); ctx.fill(); txt(String(r.rank), 30, y + 12.5, 10, '#141018', 'center'); }
+    if (md) { const mIm = unitImg('rank_' + r.rank); if (mIm) { ctx.drawImage(mIm, 21, y + 3, 18, 18); } else { ctx.fillStyle = MEDAL[r.rank - 1]; ctx.beginPath(); ctx.arc(30, y + 12, 9, 0, 7); ctx.fill(); txt(String(r.rank), 30, y + 12.5, 10, '#141018', 'center'); } }
     else txt(String(r.rank), 30, y + 12, 11, hi ? UI.gold2 : UI.txtSec, 'center');
     txt(r.name, 60, y + 12, 11, hi ? UI.gold2 : md ? MEDAL[r.rank - 1] : '#fff');
     txt(p.clear + '/' + STAGES.length, 254, y + 12, 11, '#fff', 'center');
@@ -5826,9 +5862,11 @@ function drawSynergyHUD() {
     txt(s.tier.label, sx + 18, sy + 10, 7, UI.soul);
   });
 }
+const _BATTLE_BG_MAP = ['battle_bg_dungeon','battle_bg_dungeon','battle_bg_abyss','battle_bg_abyss','battle_bg_forest','battle_bg_abyss','battle_bg_dungeon','battle_bg_forest','battle_bg_dungeon','battle_bg_abyss'];
 function drawGame() {
   BTN = [];
   ctx.fillStyle = UI.bg; ctx.fillRect(0, 0, W, H);
+  { const bgk = G.endless ? 'battle_bg_abyss' : (_BATTLE_BG_MAP[MAPCH] || 'battle_bg_dungeon'); const bIm = unitImg(bgk); if (bIm) { ctx.save(); ctx.globalAlpha = 0.28; ctx.drawImage(bIm, 0, 0, W, H); ctx.restore(); } }
   const sTop = STG.k > 0.01 ? STG.y0 + STG.h * STG.k : 0;
   ctx.save(); ctx.beginPath(); ctx.rect(0, sTop, W, PANEL_Y - sTop); ctx.clip();
   drawScene();
@@ -5853,6 +5891,7 @@ function drawGame() {
     G.stones.forEach((s, r) => { bar2(196 + r * 46, 8, 40, 9, s.hp / s.maxHp, s.hp > 0 ? UI.accent1 : '#333'); });
     txt(G.stones.filter(s => s.hp > 0).length + '/3', 320, 12, 10, UI.soul, 'right');
   } else {
+    { const chIm = unitImg('crystal_heart'); if (chIm) ctx.drawImage(chIm, 168, 4, 14, 14); }
     txt('수호석', 180, 12, 10, UI.soul);
     const stoneRatio = G.stone / G.maxStone;
     const stoneCol = stoneRatio > 0.5 ? '#10b981' : stoneRatio > 0.25 ? '#f59e0b' : '#ef4444';
@@ -5894,6 +5933,7 @@ function drawGame() {
 
   /* 하단 패널 */
   ctx.fillStyle = 'rgba(10,10,26,0.97)'; ctx.fillRect(0, PANEL_Y, W, H - PANEL_Y);
+  { const abIm = unitImg('ability_bg'); if (abIm) { ctx.save(); ctx.globalAlpha = 0.18; ctx.drawImage(abIm, 0, PANEL_Y, W, H - PANEL_Y); ctx.restore(); } }
   ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(0, PANEL_Y); ctx.lineTo(W, PANEL_Y); ctx.stroke();
   /* 배치 단계: 권속+함정 전부 / 전투 중: 권속만 크게 + 끝에 [함정 N] (누르면 배치된 함정 목록) / 재배치 중: 함정도 다시 */
@@ -5965,9 +6005,12 @@ function drawGame() {
   } else
   SKILLS.forEach((s, i) => {
     const cd = G.scd[s.key], ready = G.phase === 'run' && cd <= 0;
-    btn(sx + i * (sw + sg), sy, sw, 36, s.name, () => castSkill(s.key), {
+    const bx = sx + i * (sw + sg);
+    btn(bx, sy, sw, 36, s.name, () => castSkill(s.key), {
       dis:!ready, bg:G.aim === s.key ? '#8a4a1a' : 'rgba(124,58,237,0.22)', fs:13, on:G.aim === s.key,
       sub:cd > 0 ? Math.ceil(cd) + '초' : s.desc.slice(0, 9), sc:cd > 0 ? '#ffa94d' : UI.txtSec });
+    const sIm = unitImg('skill_' + s.key);
+    if (sIm) { ctx.save(); ctx.globalAlpha = ready ? 0.9 : 0.35; ctx.drawImage(sIm, bx + 3, sy + 3, 13, 13); ctx.restore(); }
   });
   const cy = sy + 42;
   if (G.phase === 'run') btn(sx, cy, sw, 36, G.adBuff ? '소환 완료' : '🎬 긴급 소환', adSummon, { dis:!!G.adBuff || !downed().length, bg:'#2b3f5a', fs:11, sub:G.adBuff ? '관문당 1번' : '쓰러진 ' + downed().length + '명 부활', sc:'#9ac8ff' });
@@ -6032,6 +6075,7 @@ function drawGame() {
         }
         ctx.restore();
         /* 별 순차 애니메이션 */
+        { const sfIm = unitImg('star_frame'); if (sfIm) { ctx.save(); ctx.globalAlpha = 0.7; ctx.drawImage(sfIm, W/2 - 50, 196, 100, 36); ctx.restore(); } }
         const sDelay=0.3, sInt=0.22;
         for (let i=0; i<3; i++) {
           const rev = A ? A.t - sDelay - i*sInt : 1;
@@ -7462,8 +7506,11 @@ function drawGuild() {
       const y = listTop + i * rh - L.guildY;
       if (y + rh < listTop || y > BOT) return;
       ctx.fillStyle = m.isMe ? '#241a38' : (i % 2 ? 'rgba(255,255,255,0.04)' : UI.card); ctx.fillRect(12, y, W - 24, rh - 2);
-      const ri = i === 0 ? '👑' : i === 1 ? '🥈' : i === 2 ? '🥉' : (m.role === 'master' ? '👑' : m.role === 'officer' ? '⚔️' : '');
-      txt(ri + m.name, 22, y + 16, 11, m.isMe ? UI.gold2 : '#fff');
+      const ri = m.role === 'master' || i === 0;
+      const riTxt = i === 0 ? '' : i === 1 ? '🥈' : i === 2 ? '🥉' : (m.role === 'officer' ? '⚔️' : '');
+      const crIm = ri ? unitImg('guild_crown') : null;
+      if (crIm) ctx.drawImage(crIm, 22, y + 4, 16, 16);
+      txt(riTxt + m.name, crIm ? 42 : 22, y + 16, 11, m.isMe ? UI.gold2 : '#fff');
       txt(['일반','부관','마스터'][['member','officer','master'].indexOf(m.role)] || '', 22, y + 30, 8, UI.border);
       txt(String(m.contribution), W / 2, y + 20, 11, '#c9a8ff', 'center');
       txt(m.lastSeen, W - 20, y + 20, 10, UI.txtDim, 'right');
