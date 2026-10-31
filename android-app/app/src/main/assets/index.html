@@ -1893,6 +1893,18 @@ for (const k of ['slime', 'goblin', 'bat', 'skel', 'imp', 'ghost', 'golem', 'wit
 ART_IMG['slime_attack'] = 'images/slime_attack.png';
 ART_IMG['slime_hit']    = 'images/slime_hit.png';
 ART_IMG['slime_death']  = 'images/slime_death.png';
+/* UI 에셋 */
+ART_IMG['splash_bg']    = 'images/ui/splash_bg.png';
+ART_IMG['game_logo']    = 'images/ui/game_logo.png';
+ART_IMG['season_banner']= 'images/ui/season_banner.png';
+ART_IMG['gate_clear_bg']= 'images/ui/gate_clear_bg.png';
+ART_IMG['card_N']       = 'images/ui/card_N.png';
+ART_IMG['card_R']       = 'images/ui/card_R.png';
+ART_IMG['card_SR']      = 'images/ui/card_SR.png';
+ART_IMG['card_SSR']     = 'images/ui/card_SSR.png';
+ART_IMG['card_unknown'] = 'images/ui/card_unknown.png';
+ART_IMG['guild_emblem'] = 'images/ui/guild_emblem.png';
+ART_IMG['boss_chaos']   = 'images/ui/boss_chaos.png';
 
 /* ================= 효과음 (Web Audio 합성, 음원 파일 없음) ================= */
 const SFX = (() => {
@@ -3909,6 +3921,15 @@ function unitTile(k, x, y, w, h, inT) {
   const im = unitImg(k);
   if (im) fitImg(ctx, im, x + w / 2, y + h - (h > 50 ? 15 : 4), w - 6, h - (h > 50 ? 26 : 14)); else ctx.drawImage(thumb(k), x + w / 2 - 15, y + 8, 30, 30);
   ctx.globalAlpha = 1;
+  if (h > 50) {
+    if (!own) {
+      const ukIm = unitImg('card_unknown');
+      if (ukIm) { ctx.globalAlpha = 0.45; ctx.drawImage(ukIm, x, y, w, h); ctx.globalAlpha = 1; }
+    } else {
+      const fIm = unitImg('card_' + d.rar);
+      if (fIm) ctx.drawImage(fIm, x, y, w, h);
+    }
+  }
   if (h <= 50) { if (own && isM) txt('Lv' + lvOf(k), x + w / 2, y + 7, 7, UI.txtSec, 'center'); return; }
   if (!own) { txt('미보유', x + w / 2, y + h - 7, 8, '#6b5a85', 'center'); return; }
   txt(d.name.length > 6 ? d.name.slice(0, 6) : d.name, x + w / 2, y + h - 7, 8, '#fff', 'center');
@@ -5957,8 +5978,15 @@ function drawGame() {
   btn(sx + (sw + sg) * 3, cy, sw, 36, '×' + G.speed, cycleSpeed, { fs:12, sub:G.speed === 2 && !G.fast ? '다음: ×3 🎬' : G.speed === 1 ? '배속' : G.speed === 3 ? '최고속' : '', sc:'#9ac8ff' });
 
   if (G.phase === 'win' || G.phase === 'lose') {
-    ctx.fillStyle = 'rgba(0,0,0,.78)'; ctx.fillRect(0, 0, W, H);
     const win = G.phase === 'win';
+    const gcBg = win && !G.endless ? unitImg('gate_clear_bg') : null;
+    if (gcBg) {
+      const gh = Math.round(W * gcBg.naturalHeight / gcBg.naturalWidth);
+      ctx.drawImage(gcBg, 0, (H - gh) / 2, W, gh);
+      ctx.fillStyle = 'rgba(0,0,0,0.72)'; ctx.fillRect(0, 0, W, H);
+    } else {
+      ctx.fillStyle = 'rgba(0,0,0,.78)'; ctx.fillRect(0, 0, W, H);
+    }
     if (G.endless) {
       txt('무한의 문', W / 2, 220, 22, UI.soul, 'center');
       txt(G.reached + '층 돌파!', W / 2, 260, 26, UI.gold2, 'center');
@@ -6224,6 +6252,9 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && !AD
 function drawSplash() {
   if (splashT > 2.8 && Math.min(1, splashT / 2.5) >= 1) splashDone = true;
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+  // Loading screen background image
+  const sbg = unitImg('splash_bg');
+  if (sbg) { ctx.save(); ctx.globalAlpha = Math.min(1, splashT * 2) * 0.55; ctx.drawImage(sbg, 0, 0, W, H); ctx.restore(); }
   // Hexagonal magic circle background
   const cx = W/2, cy = H/2 - 40, r = 90;
   const pulse = 0.6 + Math.sin(T * 2) * 0.4;
@@ -6245,15 +6276,24 @@ function drawSplash() {
     for (let i = 0; i < 6; i++) { const a = i/6*Math.PI*2; ctx.fillStyle = 'rgba(168,85,247,' + (0.6*pulse) + ')'; ctx.beginPath(); ctx.arc(Math.cos(a)*rr, Math.sin(a)*rr, 2.5, 0, Math.PI*2); ctx.fill(); }
     ctx.restore();
   }
-  // Title with typewriter effect
-  const titleFull = '마왕의 던전';
-  const charCount = Math.min(titleFull.length, Math.floor(splashT * 3.5));
-  const title = titleFull.slice(0, charCount);
-  ctx.save();
-  ctx.shadowColor = 'rgba(168,85,247,0.9)'; ctx.shadowBlur = 20;
-  txt(title + (splashT < 2 && charCount < titleFull.length ? '|' : ''), cx, cy + r + 36, 28, '#e4d4ff', 'center');
-  ctx.restore();
-  txt('DUNGEON LORD', cx, cy + r + 64, 11, 'rgba(168,85,247,0.7)', 'center');
+  // Game logo image or typewriter fallback
+  const logoIm = unitImg('game_logo');
+  if (logoIm) {
+    const lw = Math.min(W - 60, 300), lh = Math.round(lw * logoIm.naturalHeight / logoIm.naturalWidth);
+    ctx.save(); ctx.globalAlpha = Math.min(1, splashT * 2);
+    ctx.shadowColor = 'rgba(168,85,247,0.8)'; ctx.shadowBlur = 18;
+    ctx.drawImage(logoIm, cx - lw/2, cy + r + 10, lw, lh);
+    ctx.restore();
+  } else {
+    const titleFull = '마왕의 던전';
+    const charCount = Math.min(titleFull.length, Math.floor(splashT * 3.5));
+    const title = titleFull.slice(0, charCount);
+    ctx.save();
+    ctx.shadowColor = 'rgba(168,85,247,0.9)'; ctx.shadowBlur = 20;
+    txt(title + (splashT < 2 && charCount < titleFull.length ? '|' : ''), cx, cy + r + 36, 28, '#e4d4ff', 'center');
+    ctx.restore();
+    txt('DUNGEON LORD', cx, cy + r + 64, 11, 'rgba(168,85,247,0.7)', 'center');
+  }
   // Loading bar (flame style)
   const prog = Math.min(1, splashT / 2.5);
   const bx = 60, by = cy + r + 86, bw = W - 120, bh = 6;
@@ -7254,6 +7294,8 @@ function drawSeasonPass() {
   const atMax = lv >= SEASON_PASS.levels.length;
   ctx.fillStyle = '#1a1228'; rbox(12, 56, W - 24, 54, 8); ctx.fill();
   ctx.strokeStyle = '#6a4ac8'; ctx.lineWidth = 1.2; rbox(12, 56, W - 24, 54, 8); ctx.stroke();
+  const sBannerIm = unitImg('season_banner');
+  if (sBannerIm) { ctx.save(); rbox(12, 56, W - 24, 54, 8); ctx.clip(); ctx.globalAlpha = 0.55; ctx.drawImage(sBannerIm, 12, 56, W - 24, 54); ctx.restore(); }
   txt('시즌 1', 26, 70, 10, '#c9a8ff');
   txt(daysLeft + '일 남음', 26, 90, 13, daysLeft <= 7 ? '#ff9a4a' : UI.gold2);
   txt('Lv.' + lv + ' / ' + SEASON_PASS.levels.length, W / 2, 70, 11, UI.cyan, 'center');
@@ -7399,8 +7441,10 @@ function drawGuild() {
     btn(12 + i * 114, 56, 110, 26, t[1], function() { L.guildTab = t[0]; L.guildY = 0; }, { on:L.guildTab === t[0], bg:L.guildTab === t[0] ? 'rgba(124,58,237,0.20)' : 'rgba(255,255,255,0.04)', fs:12 });
   });
   ctx.fillStyle = '#1a1228'; rbox(12, 88, W - 24, 34, 6); ctx.fill();
+  const gEmIm = unitImg('guild_emblem');
+  if (gEmIm) { ctx.save(); ctx.globalAlpha = 0.7; ctx.drawImage(gEmIm, 20, 90, 30, 30); ctx.restore(); }
   ctx.save(); ctx.shadowColor = UI.soul; ctx.shadowBlur = 4;
-  txt('🔥 ' + g.name, 24, 108, 12, '#fff'); ctx.restore();
+  txt('🔥 ' + g.name, gEmIm ? 56 : 24, 108, 12, '#fff'); ctx.restore();
   txt('기여도 ' + (g.contribution || 0), W / 2, 108, 11, UI.gold2, 'center');
   btn(W - 76, 90, 62, 30, '탈퇴', function() { M = { k:'guildLeave' }; }, { bg:'#3a1818', bc:'#8a3a3a', fs:10, fc:'#ff8a8a' });
   const TOP = 128, BOT = NAV_Y - 4;
@@ -7528,6 +7572,8 @@ function drawGuild() {
 
 /* 보스 그림 별칭: 새 그림이 오기 전까지 기존 용사 그림을 쓴다 */
 ART_IMG.boss1 = ART_IMG.champion; ART_IMG.boss2 = ART_IMG.paladin; ART_IMG.boss3 = ART_IMG.warlock;
+/* boss4(23관문 혼돈의 거인)는 전용 일러스트 사용 */
+ART_IMG.boss4 = 'images/ui/boss_chaos.png';
 </script>
 </body>
 </html>
