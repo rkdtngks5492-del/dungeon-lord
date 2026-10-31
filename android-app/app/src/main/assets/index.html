@@ -2179,6 +2179,43 @@ function endlessRelayout() {
 }
 /* 새 구간에 처음 들어갈 때: "던전이 더 깊어졌다" + 구도 특징 한 줄 */
 function segBanner(seg) { G.banner = { t:0, seg }; SFX.roar && SFX.roar(); }
+const STORY_LINES = {
+  1:'감히 내 던전에 발을 들이다니... 첫 번째 시련을 맛봐라.',
+  2:'용사여, 여기서 멈춰라. 내 권속들이 너를 기다리고 있다.',
+  3:'흥. 여기까지 왔군. 하지만 진짜 시련은 이제부터다.',
+  4:'폐허의 문을 넘었다고? 네 용기는 인정하지. 하지만 그뿐이다.',
+  5:'선봉대를 물리쳤군. 내 던전 깊숙이 들어올수록 더 강한 자들이 기다린다.',
+  6:'...예상보다 강하군. 하지만 아직 내 던전의 절반도 못 왔다.',
+  7:'1장을 돌파했다고? 좋아. 다음엔 더 어두운 곳으로 안내해주지.',
+  8:'여기는 내 던전의 심장부. 돌아갈 길은 없다.',
+  9:'성기사단이 왔군... 신의 가호가 있어도 소용없다.',
+  10:'성기사단 본진까지 왔다고? 네 신도 여기선 힘을 못 쓴다.',
+  11:'심연의 계단... 한 발 내딛을 때마다 네 영혼이 잠식된다.',
+  12:'뒤틀린 서고에서 무언가를 찾고 있나? 진실은 너를 더 깊이 끌어당길 뿐.',
+  13:'거의 다 왔군... 그래서 더 위험하다.',
+  14:'2장을 넘었다. 너는... 보통 용사가 아니군.',
+  15:'3장에 발을 들였군. 이제부터는 내 직속 부하들이 상대한다.',
+};
+const STORY_CLEAR = '...인정한다. 하지만 다음 관문엔 더 강한 자들이 기다린다.';
+const STORY_PERFECT = '훌륭하다. 네 실력... 인정하지 않을 수 없군.';
+function showStoryPopup(line) { G.storyPopup = { line, t:0 }; }
+function drawStoryPopup() {
+  const sp = G.storyPopup; if (!sp) return;
+  sp.t += 1/60;
+  const a = Math.min(1, sp.t / 0.3);
+  ctx.save(); ctx.globalAlpha = a;
+  const pw = W - 32, ph = 80, px = 16, py = H / 2 - ph / 2;
+  ctx.fillStyle = 'rgba(8,4,16,0.92)'; rbox(px, py, pw, ph, 12); ctx.fill();
+  ctx.strokeStyle = '#6a4ac8'; ctx.lineWidth = 1.5; rbox(px, py, pw, ph, 12); ctx.stroke();
+  txt('👹', px + 26, py + ph/2 + 1, 28, '#fff', 'center');
+  ctx.fillStyle = 'rgba(255,255,255,0.06)'; rbox(px + 52, py + 8, pw - 60, ph - 16, 8); ctx.fill();
+  const lines = wrapLines([sp.line], pw - 76, 11);
+  lines.slice(0, 3).forEach((l, i) => txt(l, px + 60, py + 22 + i * 18, 11, '#e4d4ff'));
+  ctx.fillStyle = 'rgba(168,85,247,0.5)'; rbox(px + pw - 46, py + ph - 22, 38, 14, 6); ctx.fill();
+  txt('닫기', px + pw - 27, py + ph - 15, 9, '#c9a8ff', 'center');
+  ctx.restore();
+  BTN.push({ x:px, y:py, w:pw, h:ph, act:() => { G.storyPopup = null; } });
+}
 function segIntro(i) {
   const seg = LAYOUT.seg; SAVE.segSeen = SAVE.segSeen || [];
   const firstTime = SAVE.segSeen.indexOf(seg) < 0;
@@ -2191,7 +2228,7 @@ function segIntro(i) {
 function drawSegBanner() {
   const B = G.banner; if (!B) return;
   B.t += 1 / 60;
-  const life = B.full ? 3.2 : 2.0;
+  const life = B.full ? 0.5 : 0.5;
   if (B.t > life) { G.banner = null; return; }
   const a = Math.min(1, B.t / 0.25, (life - B.t) / 0.4), c = MAPCFG[B.seg];
   const sl = (B.strat >= 0) ? STRAT_LAYOUTS[B.strat] : null;
@@ -2353,6 +2390,7 @@ function startBattle(i) {
   requestStamNotif();   /* 첫 전투 시작 시 알림 권한 한 번 요청 */
   buildMap(layoutFor(i, 1)); reset(i); scene = 'game'; camSnap('prep'); segIntro(i);
   G.battleT = Date.now(); Analytics.log('stage_start', { stage_id: i });
+  if (i !== ENDLESS && STORY_LINES[i]) showStoryPopup(STORY_LINES[i]);
 }
 function finishBattle() {
   if (G.done) return; G.done = true;
@@ -2412,6 +2450,8 @@ function finishBattle() {
       if (SAVE.vib) try { navigator.vibrate([100,50,100,50,200]); } catch(e) {}
       G.slowMoT = 3;
     }
+    /* 클리어 스토리 팝업 */
+    if (!G.endless) setTimeout(() => { if (G.phase === 'win') showStoryPopup(G.stars === 3 ? STORY_PERFECT : STORY_CLEAR); }, 1800);
     SAVE.stars[G.stage] = Math.max(SAVE.stars[G.stage] || 0, G.stars);
     if (G.stars === 3) { SAVE.star3streak = (SAVE.star3streak || 0) + 1; } else { SAVE.star3streak = 0; }
     if (G.stone >= G.maxStone) SAVE.achGot._pflag = 1;
@@ -5590,9 +5630,16 @@ function drawScene() {
   pushBox(180, 52, Z_START, 94, 10, 14, '#6b5038');
 
   /* 배치 칸 */
+  const _pulse = 0.55 + Math.sin(T * 4) * 0.45;
+  const _hasCard = G.sel >= 0;
   for (let i = 0; i < NROOM; i++) {
     const r = ROOMS[i], b = G.rooms[i];
-    const col = i === G.sel ? '#7a6630' : (G.moveFrom >= 0 && !b) ? '#2f5f3f' : b ? '#2a2440' : r.trapOnly ? '#5a2e36' : '#473c66';
+    const canPlace = _hasCard && !b && G.phase === 'prep';
+    const col = i === G.sel ? '#7a6630'
+      : (G.moveFrom >= 0 && !b) ? '#2f5f3f'
+      : b ? '#1a1830'
+      : canPlace ? (r.trapOnly ? `rgba(180,60,80,${0.5 + _pulse * 0.35})` : `rgba(90,70,180,${0.5 + _pulse * 0.35})`)
+      : r.trapOnly ? '#5a2e36' : '#473c66';
     pushBox(r.x, 3, r.z, 30, 7, 30, col);
   }
 
@@ -5732,6 +5779,7 @@ function drawScene() {
     ctx.restore();
   }
   drawSegBanner();
+  drawStoryPopup();
   if (DBG.on) drawDebug();
   /* 교전 중인 자리: 붉은 원 */
   for (const P of G.parties) if (P.fight) {
@@ -5953,15 +6001,22 @@ function drawGame() {
                { bg:G.trapOpen ? 'rgba(124,58,237,0.20)' : 'rgba(20,10,40,0.9)', fs:bw < 44 ? 9 : 11, sub:G.trapOpen ? '' : '목록', sc:UI.txtSec });
   list.forEach((k, i) => {
     const d = DEF[k], left = G.hand[k] || 0, bad = G.sel >= 0 && !G.rooms[G.sel] && left > 0 && !roomOk(k, G.sel), ok = left > 0 && G.sel >= 0 && !G.rooms[G.sel] && !bad;
-    const x = x0 + i * (bw + gp), y = PANEL_Y + 6;
+    const x = x0 + i * (bw + gp);
     const u = d.kind === 'minion' ? G.rooms.find(b => b && b.key === k && !b.extra) : null, US = u ? uSkill(k) : null, act = US && US.act;
     const full = act && G.phase === 'run' && u.g >= 1;
-    BTN.push({ x, y, w:bw, h:58, act:() => {
+    const cy2 = y - (ok ? 5 : 0);
+    BTN.push({ x, y:cy2, w:bw, h:58, act:() => {
       if (act && G.phase === 'run') { if (u.g >= 1) castActive(u); else say(act.name + ' 충전 중 ' + Math.floor(u.g * 100) + '%'); }
       else place(k);
     }, label:'카드:' + k });
-    ctx.fillStyle = ok ? 'rgba(124,58,237,0.20)' : UI.card; rbox(x, y, bw, 58, 7); ctx.fill();
-    ctx.strokeStyle = ok ? UI.gold2 : RAR_COL[d.rar]; ctx.lineWidth = ok ? 2 : 1.2; rbox(x, y, bw, 58, 7); ctx.stroke();
+    /* 배치된 카드: 어둡게, 배치 가능 카드: 펄스 테두리 + lift */
+    const placed = left <= 0 && !act;
+    ctx.fillStyle = placed ? 'rgba(20,15,35,0.7)' : ok ? 'rgba(124,58,237,0.22)' : UI.card;
+    rbox(x, cy2, bw, 58, 7); ctx.fill();
+    if (ok) { ctx.save(); ctx.shadowColor = UI.gold2; ctx.shadowBlur = 6 + Math.sin(T*5)*4; }
+    ctx.strokeStyle = ok ? UI.gold2 : RAR_COL[d.rar]; ctx.lineWidth = ok ? 2 : (placed ? 0.6 : 1.2);
+    rbox(x, cy2, bw, 58, 7); ctx.stroke();
+    if (ok) ctx.restore();
     if (act) {
       /* 원형 게이지: 차오르다 다 차면 테두리가 빛난다 */
       const cx = x + bw / 2, cy = y + 24, r = Math.min(bw / 2 - 2, 21), g = Math.min(1, u.g || 0);
@@ -5970,35 +6025,35 @@ function drawGame() {
       ctx.strokeStyle = full ? UI.gold2 : UI.cyan; ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + g * Math.PI * 2); ctx.stroke();
       if (full) {
         ctx.shadowColor = UI.gold2; ctx.shadowBlur = 10 + Math.sin(T * 8) * 6;
-        ctx.strokeStyle = '#ffe36b'; ctx.lineWidth = 2.5; rbox(x, y, bw, 58, 7); ctx.stroke();
+        ctx.strokeStyle = '#ffe36b'; ctx.lineWidth = 2.5; rbox(x, cy2, bw, 58, 7); ctx.stroke();
       }
       ctx.restore();
     }
     ctx.globalAlpha = left > 0 ? 1 : 0.25;
     const hi = unitImg(k);
-    if (hi) fitImg(ctx, hi, x + bw / 2, y + 44, bw - 6, 40);
-    else ctx.drawImage(thumb(k), x + bw / 2 - 21, y + 3, 42, 42);
-    if (bad) { ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(40,8,12,.6)'; rbox(x, y, bw, 58, 7); ctx.fill(); txt('✕', x + bw / 2, y + 22, 18, UI.red, 'center'); txt('못 놓음', x + bw / 2, y + 46, 8, '#ff9a9a', 'center'); }   /* 이 칸에는 못 세운다 (누르면 이유) */
+    if (hi) fitImg(ctx, hi, x + bw / 2, cy2 + 44, bw - 6, 40);
+    else ctx.drawImage(thumb(k), x + bw / 2 - 21, cy2 + 3, 42, 42);
+    if (bad) { ctx.globalAlpha = 1; ctx.fillStyle = 'rgba(40,8,12,.6)'; rbox(x, cy2, bw, 58, 7); ctx.fill(); txt('✕', x + bw / 2, cy2 + 22, 18, UI.red, 'center'); txt('못 놓음', x + bw / 2, cy2 + 46, 8, '#ff9a9a', 'center'); }
     ctx.globalAlpha = 1;
     const lvT = 'Lv' + (d.kind === 'minion' ? lvOf(k) : SAVE.own[k] || 1);
     /* 쓰러진 권속: 칸은 남기고 어둡게 (긴급 소환으로 되살아날 대상) */
     if (run && d.kind === 'minion' && !u && G.revive.some(r => r.key === k)) {
-      ctx.fillStyle = 'rgba(6,4,10,.66)'; rbox(x, y, bw, 58, 7); ctx.fill();
-      txt('쓰러짐', x + bw / 2, y + 49, 9, '#ff8a8a', 'center'); return;
+      ctx.fillStyle = 'rgba(6,4,10,.66)'; rbox(x, cy2, bw, 58, 7); ctx.fill();
+      txt('쓰러짐', x + bw / 2, cy2 + 49, 9, '#ff8a8a', 'center'); return;
     }
     if (run && d.kind === 'trap') {
       const tb = G.rooms.find(b => b && b.key === k);
       /* Feature 5: 함정 쿨타임 시각적 표시 */
       if (tb && tb.cd > 0 && !tb.spent) {
         ctx.globalAlpha = 0.5;
-        ctx.fillStyle = 'rgba(0,0,0,0.7)'; rbox(x, y, bw, 58, 7); ctx.fill();
+        ctx.fillStyle = 'rgba(0,0,0,0.7)'; rbox(x, cy2, bw, 58, 7); ctx.fill();
         ctx.globalAlpha = 1;
-        txt(tb.cd.toFixed(1) + 's', x + bw / 2, y + 25, 13, '#ffa94d', 'center');
+        txt(tb.cd.toFixed(1) + 's', x + bw / 2, cy2 + 25, 13, '#ffa94d', 'center');
       }
       const ts = !tb ? '' : tb.spent ? '사용됨' : d.mode === 'zone' ? '작동 중' : d.mode === 'periodic' && tb.cd > 0 ? Math.ceil(tb.cd) + '초' : '대기';
-      txt(ts, x + bw / 2, y + 49, 9, tb && tb.spent ? '#6b5a85' : '#9ae8b5', 'center'); return;
+      txt(ts, x + bw / 2, cy2 + 49, 9, tb && tb.spent ? '#6b5a85' : '#9ae8b5', 'center'); return;
     }
-    txt(full ? '발동!' : act && G.phase === 'run' ? Math.floor(u.g * 100) + '%' : left > 0 ? lvT : (bw < 34 ? '✓' : '배치됨'), x + bw / 2, y + 49, full ? 11 : 9,
+    txt(full ? '발동!' : act && G.phase === 'run' ? Math.floor(u.g * 100) + '%' : left > 0 ? lvT : (bw < 34 ? '✓' : '배치됨'), x + bw / 2, cy2 + 49, full ? 11 : 9,
         full ? '#ffe36b' : act && G.phase === 'run' ? UI.cyan : left > 0 ? UI.txtSec : '#6b5a85', 'center');
   });
   const sy = PANEL_Y + 70, sw = 82, sg = 6, sx = (W - (sw * 4 + sg * 3)) / 2;
